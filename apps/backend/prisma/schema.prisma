@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// PostgreSQL view - read-only
+model TriangleOpportunity {
+  id             Int       @id
+  runId          String?   @map("run_id")
+  runTime        DateTime? @map("run_time")
+  timestamp      DateTime
+  tradeDate      DateTime  @map("trade_date") @db.Date
+  path           String?
+  triangleKey    String    @map("triangle_key")
+  currA          String    @map("curr_a")
+  currB          String    @map("curr_b")
+  currC          String    @map("curr_c")
+  profitRawPct   Float?    @map("profit_raw_pct")
+  profitNetPct   Float     @map("profit_net_pct")
+  rateAb         Float?    @map("rate_ab")
+  rateBc         Float?    @map("rate_bc")
+  rateCa         Float?    @map("rate_ca")
+  pairAb         String    @map("pair_ab")
+  pairBc         String    @map("pair_bc")
+  pairCa         String    @map("pair_ca")
+  dirAb          String?   @map("dir_ab")
+  dirBc          String?   @map("dir_bc")
+  dirCa          String?   @map("dir_ca")
+  minVolume      Float?    @map("min_volume")
+  volumeUsdAb    Float?    @map("volume_usd_ab")
+  volumeUsdBc    Float?    @map("volume_usd_bc")
+  volumeUsdCa    Float?    @map("volume_usd_ca")
+  minQuoteVolume Float?    @map("min_quote_volume")
+  minTrades      Int?      @map("min_trades")
+  createdAt      DateTime? @map("created_at")
+  hourTime       DateTime? @map("hour_time")
+
+  // Volatility metrics - 24h
+  rv24Ab    Float? @map("rv24_ab")
+  range24Ab Float? @map("range24_ab")
+  liq24Ab   Float? @map("liq24_ab")
+  cov24Ab   Float? @map("cov24_ab")
+  rv24Bc    Float? @map("rv24_bc")
+  range24Bc Float? @map("range24_bc")
+  liq24Bc   Float? @map("liq24_bc")
+  cov24Bc   Float? @map("cov24_bc")
+  rv24Ca    Float? @map("rv24_ca")
+  range24Ca Float? @map("range24_ca")
+  liq24Ca   Float? @map("liq24_ca")
+  cov24Ca   Float? @map("cov24_ca")
+
+  // Volatility metrics - 168h (1 week)
+  rv168Ab Float? @map("rv168_ab")
+  rv168Bc Float? @map("rv168_bc")
+  rv168Ca Float? @map("rv168_ca")
+
+  // Volatility metrics - 720h (30 days)
+  rv720Ab Float? @map("rv720_ab")
+  rv720Bc Float? @map("rv720_bc")
+  rv720Ca Float? @map("rv720_ca")
+
+  // Volume CV
+  volcvAb Float? @map("volcv_ab")
+  volcvBc Float? @map("volcv_bc")
+  volcvCa Float? @map("volcv_ca")
+
+  // Triangle-level aggregates
+  triRv24hMax    Float? @map("tri_rv24h_max")
+  triRv24hMean   Float? @map("tri_rv24h_mean")
+  triRv168hMax   Float? @map("tri_rv168h_max")
+  triRv720hMax   Float? @map("tri_rv720h_max")
+  triRange24hMax Float? @map("tri_range24h_max")
+  triLiq24hMin   Float? @map("tri_liq24h_min")
+  triCov24hMin   Float? @map("tri_cov24h_min")
+  triVolcv24hMax Float? @map("tri_volcv24h_max")
+
+  @@map("vw_triangle_opportunities_enriched")
+}
