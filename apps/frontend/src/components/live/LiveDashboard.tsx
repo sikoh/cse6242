@@ -1,15 +1,24 @@
+import { Clock, PanelRightOpen } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { NetworkGraph } from '@/components/graph/NetworkGraph'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { useAppContext } from '@/context/AppContext'
 import { useArbitrageDetection } from '@/hooks/useArbitrageDetection'
 import { useBinanceExchangeInfo } from '@/hooks/useBinanceExchangeInfo'
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket'
+import { useElapsedTime } from '@/hooks/useElapsedTime'
+import { DEFAULT_QUOTE_CURRENCIES } from '@/lib/graph'
 import { formatNumber } from '@/lib/utils'
 import type { BookTickerMessage, LiveConfig } from '@/types'
+import { CoinSelector } from './CoinSelector'
 import { LiveControls } from './LiveControls'
 import { OpportunityFeed } from './OpportunityFeed'
+import { PairsDrawer } from './PairsDrawer'
+import { PriceMapDrawer } from './PriceMapDrawer'
+import { StreamsDrawer } from './StreamsDrawer'
+import { TrianglesDrawer } from './TrianglesDrawer'
 
 export function LiveDashboard() {
   const { selectedNode, openNodeDetail } = useAppContext()
@@ -17,23 +26,43 @@ export function LiveDashboard() {
   const [config, setConfig] = useState<LiveConfig>({
     fee: 0.1,
     minProfit: 0.05,
-    notional: 100,
+    notional: 1000,
   })
+  const [staleMinutes, setStaleMinutes] = useState(5)
+  const [selectedCoins, setSelectedCoins] = useState<string[]>(DEFAULT_QUOTE_CURRENCIES)
+  const [coinSelectorOpen, setCoinSelectorOpen] = useState(false)
+  const [pairsDrawerOpen, setPairsDrawerOpen] = useState(false)
+  const [trianglesDrawerOpen, setTrianglesDrawerOpen] = useState(false)
+  const [priceMapDrawerOpen, setPriceMapDrawerOpen] = useState(false)
+  const [streamsDrawerOpen, setStreamsDrawerOpen] = useState(false)
+  const [showActiveOnly, setShowActiveOnly] = useState(true)
 
   const {
+    allCoins,
     pairs,
     triangles,
     pairCount,
     triangleCount,
     isLoading: exchangeLoading,
-  } = useBinanceExchangeInfo()
+  } = useBinanceExchangeInfo(selectedCoins)
 
-  const { opportunities, totalCount, stats, sendPriceUpdate, clearOpportunities } =
-    useArbitrageDetection({
-      triangles,
-      config,
-      enabled: !isPaused && !exchangeLoading,
-    })
+  const {
+    dedupedOpportunities,
+    totalCount,
+    stats,
+    priceMapEntries,
+    startTime,
+    sendPriceUpdate,
+    requestPriceMap,
+    clearOpportunities,
+  } = useArbitrageDetection({
+    triangles,
+    config,
+    enabled: !isPaused && !exchangeLoading,
+    staleMinutes,
+  })
+
+  const elapsed = useElapsedTime(startTime)
 
   const handleMessage = useCallback(
     (message: BookTickerMessage) => {
@@ -44,40 +73,67 @@ export function LiveDashboard() {
     [isPaused, sendPriceUpdate]
   )
 
-  const { status, messagesPerSecond, reconnect } = useBinanceWebSocket({
+  const { status, messagesPerSecond, getMessageLog, reconnect } = useBinanceWebSocket({
     pairs,
     enabled: !exchangeLoading,
     onMessage: handleMessage,
   })
 
+  const handleCoinSave = useCallback(
+    (coins: string[]) => {
+      setSelectedCoins(coins)
+      clearOpportunities()
+    },
+    [clearOpportunities]
+  )
+
   const opportunitiesDisplay =
     totalCount > 9_999 ? formatNumber(totalCount, 0) : totalCount.toLocaleString('en-US')
 
-  // Build flashing edges from recent opportunities
-  const flashingEdges = useMemo(() => {
-    const edges = new Set<string>()
-    const recentThreshold = Date.now() - 2000 // Last 2 seconds
-    for (const opp of opportunities) {
-      if (opp.timestamp > recentThreshold) {
-        for (const step of opp.steps) {
-          edges.add(step.pair)
-        }
+  // Build triangle lookup for pair resolution
+  const triangleLookup = useMemo(() => {
+    const map = new Map<string, [string, string, string]>()
+    for (const t of triangles) {
+      map.set(t.key, t.pairs)
+    }
+    return map
+  }, [triangles])
+
+  // Derive highlighted edges from dedupedOpportunities — the same data
+  // backing the grouped feed. If a group exists, its edges stay highlighted.
+  // Staleness is based on each triangle's most recent opportunity timestamp.
+  const highlightedEdges = useMemo(() => {
+    // Collect the latest timestamp per triangle key across all deduped entries
+    const latestByTriangle = new Map<string, number>()
+    for (const opp of dedupedOpportunities) {
+      const prev = latestByTriangle.get(opp.triangleKey) ?? 0
+      if (opp.timestamp > prev) {
+        latestByTriangle.set(opp.triangleKey, opp.timestamp)
+      }
+    }
+
+    const edges = new Map<string, 'active' | 'stale'>()
+    const staleMs = staleMinutes * 60_000
+    const now = Date.now()
+
+    for (const [triangleKey, timestamp] of latestByTriangle) {
+      const triPairs = triangleLookup.get(triangleKey)
+      if (!triPairs) continue
+      const status = now - timestamp <= staleMs ? 'active' : 'stale'
+      for (const pair of triPairs) {
+        // Only upgrade: if already active, don't downgrade to stale
+        if (edges.get(pair) === 'active') continue
+        edges.set(pair, status)
       }
     }
     return edges
-  }, [opportunities])
+  }, [dedupedOpportunities, triangleLookup, staleMinutes])
 
-  // Build simple graph data from triangles
+  // Build graph data from triangles + dedupedOpportunities (true cumulatives)
   const graphData = useMemo(() => {
     const nodeMap = new Map<
       string,
-      {
-        id: string
-        opportunityCount: number
-        totalVolumeUsd: number
-        avgProfit: number
-        profitSum: number
-      }
+      { id: string; opportunityCount: number; totalVolumeUsd: number; avgProfit: number }
     >()
 
     for (const triangle of triangles) {
@@ -88,13 +144,11 @@ export function LiveDashboard() {
             opportunityCount: 0,
             totalVolumeUsd: 0,
             avgProfit: 0,
-            profitSum: 0,
           })
         }
       }
     }
 
-    // Build links from pairs (start with frequency 0)
     const linkMap = new Map<
       string,
       {
@@ -104,7 +158,6 @@ export function LiveDashboard() {
         frequency: number
         avgProfit: number
         totalVolumeUsd: number
-        profitSum: number
       }
     >()
     for (const pair of pairs) {
@@ -115,42 +168,56 @@ export function LiveDashboard() {
         frequency: 0,
         avgProfit: 0,
         totalVolumeUsd: 0,
-        profitSum: 0,
       })
     }
 
-    // Update counts from opportunities
-    for (const opp of opportunities) {
-      // Calculate total volume for this opportunity from its steps
-      const oppVolume = opp.steps.reduce((sum, step) => sum + step.price * step.quantity, 0)
-
+    // Accumulate from dedupedOpportunities — each entry's `count` is the
+    // number of raw opportunities it represents, and `volumeUsd` is already
+    // the aggregated volume across all those raw opportunities.
+    for (const opp of dedupedOpportunities) {
       const currencies = [opp.currA, opp.currB, opp.currC]
       for (const currency of currencies) {
         const node = nodeMap.get(currency)
         if (node) {
-          node.opportunityCount++
-          node.profitSum += opp.profitPct
-          node.avgProfit = node.profitSum / node.opportunityCount
-          node.totalVolumeUsd += oppVolume
+          node.opportunityCount += opp.count
+          node.totalVolumeUsd += opp.volumeUsd
         }
       }
-      // Update link frequencies from opportunity steps
-      for (const step of opp.steps) {
-        const link = linkMap.get(step.pair)
-        if (link) {
-          link.frequency++
-          link.profitSum += opp.profitPct
-          link.avgProfit = link.profitSum / link.frequency
-          link.totalVolumeUsd += step.price * step.quantity
+
+      // Distribute volume equally across the triangle's 3 pairs
+      const triPairs = triangleLookup.get(opp.triangleKey)
+      if (triPairs) {
+        const volumePerPair = opp.volumeUsd / 3
+        for (const pairSymbol of triPairs) {
+          const link = linkMap.get(pairSymbol)
+          if (link) {
+            link.frequency += opp.count
+            link.totalVolumeUsd += volumePerPair
+          }
         }
       }
     }
 
-    const nodes = Array.from(nodeMap.values()).map(({ profitSum, ...rest }) => rest)
-    const links = Array.from(linkMap.values()).map(({ profitSum, ...rest }) => rest)
+    const nodes = Array.from(nodeMap.values())
+    const links = Array.from(linkMap.values())
 
     return { nodes, links }
-  }, [triangles, pairs, opportunities])
+  }, [triangles, pairs, dedupedOpportunities, triangleLookup])
+
+  // Filter graph to only nodes/links involved in detected opportunities
+  const filteredGraphData = useMemo(() => {
+    if (!showActiveOnly || highlightedEdges.size === 0) return graphData
+
+    const activeLinks = graphData.links.filter((l) => highlightedEdges.has(l.pair))
+    const activeNodeIds = new Set<string>()
+    for (const link of activeLinks) {
+      activeNodeIds.add(link.source)
+      activeNodeIds.add(link.target)
+    }
+    const activeNodes = graphData.nodes.filter((n) => activeNodeIds.has(n.id))
+
+    return { nodes: activeNodes, links: activeLinks }
+  }, [graphData, highlightedEdges, showActiveOnly])
 
   const handleNodeClick = useCallback(
     (nodeId: string) => {
@@ -182,48 +249,54 @@ export function LiveDashboard() {
         onClear={clearOpportunities}
         status={status}
         onReconnect={reconnect}
+        staleMinutes={staleMinutes}
+        onStaleMinutesChange={setStaleMinutes}
       />
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <StatCard
+          label="Base Coins"
+          value={selectedCoins.length}
+          onClick={() => setCoinSelectorOpen(true)}
+          hasDrawer
+        />
+        <StatCard
+          label="Pairs"
+          value={pairCount}
+          onClick={() => setPairsDrawerOpen(true)}
+          hasDrawer
+        />
+        <StatCard
+          label="Possible Triangles"
+          value={triangleCount}
+          onClick={() => setTrianglesDrawerOpen(true)}
+          hasDrawer
+        />
+        <StatCard
+          label="Messages/sec"
+          value={formatNumber(messagesPerSecond, 0)}
+          onClick={() => setStreamsDrawerOpen(true)}
+          hasDrawer
+        />
+        <StatCard
+          label="Price Map"
+          value={stats.priceMapSize}
+          onClick={() => setPriceMapDrawerOpen(true)}
+          hasDrawer
+        />
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Pairs</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm text-muted-foreground">Opportunities</CardTitle>
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Clock className="size-3.5" />
+                <span className="font-mono text-xs">{elapsed}</span>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold">{pairCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Triangles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-bold">{triangleCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Messages/sec</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-bold">{formatNumber(messagesPerSecond, 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Price Map</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-bold">{stats.priceMapSize}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Opportunities</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-bold text-green-500">{opportunitiesDisplay}</p>
+            <p className="text-xl font-bold text-green-500">{opportunitiesDisplay}</p>
           </CardContent>
         </Card>
       </div>
@@ -234,16 +307,22 @@ export function LiveDashboard() {
         <div className="lg:col-span-2">
           <div className="flex h-[500px] flex-col rounded-lg border border-border bg-card">
             <div className="flex-shrink-0 border-b border-border px-4 py-1.5">
-              <h2 className="text-sm font-medium">Live Network</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium">Live Network</h2>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Active only</span>
+                  <Switch size="sm" checked={showActiveOnly} onCheckedChange={setShowActiveOnly} />
+                </label>
+              </div>
             </div>
             <div className="min-h-0 flex-1">
               <NetworkGraph
-                nodes={graphData.nodes}
-                links={graphData.links}
+                nodes={filteredGraphData.nodes}
+                links={filteredGraphData.links}
                 selectedNode={selectedNode}
                 onNodeClick={handleNodeClick}
                 mode="live"
-                flashingEdges={flashingEdges}
+                highlightedEdges={highlightedEdges}
               />
             </div>
           </div>
@@ -251,9 +330,72 @@ export function LiveDashboard() {
 
         {/* Opportunity feed */}
         <div className="lg:col-span-1">
-          <OpportunityFeed opportunities={opportunities} />
+          <OpportunityFeed opportunities={dedupedOpportunities} />
         </div>
       </div>
+
+      {/* Drawers */}
+      <CoinSelector
+        open={coinSelectorOpen}
+        onOpenChange={setCoinSelectorOpen}
+        allCoins={allCoins}
+        selectedCoins={selectedCoins}
+        onSave={handleCoinSave}
+      />
+      <PairsDrawer open={pairsDrawerOpen} onOpenChange={setPairsDrawerOpen} pairs={pairs} />
+      <TrianglesDrawer
+        open={trianglesDrawerOpen}
+        onOpenChange={setTrianglesDrawerOpen}
+        triangles={triangles}
+      />
+      <StreamsDrawer
+        open={streamsDrawerOpen}
+        onOpenChange={setStreamsDrawerOpen}
+        getMessageLog={getMessageLog}
+      />
+      <PriceMapDrawer
+        open={priceMapDrawerOpen}
+        onOpenChange={setPriceMapDrawerOpen}
+        entries={priceMapEntries}
+        onRequest={requestPriceMap}
+      />
     </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  onClick,
+  hasDrawer,
+}: {
+  label: string
+  value: number | string
+  onClick: () => void
+  hasDrawer?: boolean
+}) {
+  return (
+    <Card
+      className="cursor-pointer transition-colors hover:bg-muted/50"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
+          {hasDrawer && <PanelRightOpen className="size-4 text-muted-foreground" />}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xl font-bold">{value}</p>
+      </CardContent>
+    </Card>
   )
 }

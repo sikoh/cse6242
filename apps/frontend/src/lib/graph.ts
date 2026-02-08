@@ -1,12 +1,31 @@
 import type { BinanceSymbol, GraphLink, GraphNode, Triangle } from '@/types'
 
-const QUOTE_CURRENCIES = ['USDT', 'BTC', 'ETH', 'BNB', 'BUSD']
+export const DEFAULT_QUOTE_CURRENCIES = ['USDT', 'USD', 'USDC', 'BTC', 'ETH']
 
-export function filterRelevantPairs(symbols: BinanceSymbol[]): BinanceSymbol[] {
+export interface CoinInfo {
+  symbol: string
+  pairCount: number
+}
+
+export function deriveAllCoins(symbols: BinanceSymbol[]): CoinInfo[] {
+  const counts = new Map<string, number>()
+  for (const s of symbols) {
+    if (s.status !== 'TRADING') continue
+    counts.set(s.baseAsset, (counts.get(s.baseAsset) ?? 0) + 1)
+    counts.set(s.quoteAsset, (counts.get(s.quoteAsset) ?? 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([symbol, pairCount]) => ({ symbol, pairCount }))
+    .sort((a, b) => b.pairCount - a.pairCount)
+}
+
+export function filterRelevantPairs(
+  symbols: BinanceSymbol[],
+  quoteCurrencies: string[] = DEFAULT_QUOTE_CURRENCIES
+): BinanceSymbol[] {
   return symbols.filter((s) => {
     if (s.status !== 'TRADING') return false
-    // At least one side should be a major quote currency
-    return QUOTE_CURRENCIES.includes(s.baseAsset) || QUOTE_CURRENCIES.includes(s.quoteAsset)
+    return quoteCurrencies.includes(s.baseAsset) || quoteCurrencies.includes(s.quoteAsset)
   })
 }
 

@@ -2,6 +2,7 @@ import type {
   BookTickerMessage,
   LiveConfig,
   LiveOpportunity,
+  PriceMapEntry,
   TradeStep,
   Triangle,
   WorkerInboundMessage,
@@ -27,22 +28,32 @@ let opportunitySeq = 0
 
 // Handle messages from main thread
 self.onmessage = (event: MessageEvent<WorkerInboundMessage>) => {
-  const { type, payload } = event.data
+  const msg = event.data
 
-  switch (type) {
+  switch (msg.type) {
     case 'INIT':
-      triangles = payload.triangles
-      config = payload.config
+      triangles = msg.payload.triangles
+      config = msg.payload.config
       priceMap.clear()
       break
 
     case 'PRICE_UPDATE':
-      handlePriceUpdate(payload as BookTickerMessage)
+      handlePriceUpdate(msg.payload)
       break
 
     case 'CONFIG_UPDATE':
-      config = payload
+      config = msg.payload
       break
+
+    case 'REQUEST_PRICE_MAP': {
+      const entries: PriceMapEntry[] = []
+      for (const [symbol, data] of priceMap) {
+        entries.push({ symbol, ...data })
+      }
+      const msg: WorkerOutboundMessage = { type: 'PRICE_MAP', payload: entries }
+      self.postMessage(msg)
+      break
+    }
   }
 }
 

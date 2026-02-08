@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
-import { formatNumber, formatPercent, formatUsd } from '@/lib/utils'
+import { formatNumber, formatUsd } from '@/lib/utils'
 import type { GraphLink, GraphNode } from '@/types'
 
 interface GraphTooltipProps {
@@ -40,8 +40,6 @@ function NodeTooltipContent({ data }: { data: GraphNode }) {
         <span>{formatNumber(data.opportunityCount, 0)}</span>
         <span className="text-muted-foreground">Volume:</span>
         <span>{formatUsd(data.totalVolumeUsd)}</span>
-        <span className="text-muted-foreground">Avg Profit:</span>
-        <span>{formatPercent(data.avgProfit)}</span>
       </div>
     </div>
   )
@@ -59,8 +57,6 @@ function LinkTooltipContent({ data }: { data: GraphLink }) {
         <span>{formatNumber(data.frequency, 0)}</span>
         <span className="text-muted-foreground">Volume:</span>
         <span>{formatUsd(data.totalVolumeUsd)}</span>
-        <span className="text-muted-foreground">Avg Profit:</span>
-        <span>{formatPercent(data.avgProfit)}</span>
       </div>
     </div>
   )

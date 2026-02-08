@@ -13,7 +13,7 @@ interface NetworkGraphProps {
   onNodeClick: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   mode: 'historical' | 'live'
-  flashingEdges?: Set<string>
+  highlightedEdges?: Map<string, 'active' | 'stale'>
 }
 
 interface TooltipData {
@@ -33,7 +33,7 @@ export function NetworkGraph({
   onNodeClick,
   onNodeHover,
   mode,
-  flashingEdges,
+  highlightedEdges,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const simulationRef = useRef<d3.Simulation<D3Node, D3Link> | null>(null)
@@ -175,11 +175,24 @@ export function NetworkGraph({
       .data(d3Links, (d) => d.pair)
       .join('line')
       .attr('data-pair', (d) => d.pair)
-      .attr('stroke', (d) => (flashingEdges?.has(d.pair) ? '#facc15' : '#6b7280'))
+      .attr('stroke', (d) => {
+        const state = highlightedEdges?.get(d.pair)
+        return state ? '#facc15' : '#6b7280'
+      })
       .attr('stroke-width', (d) => widthScale(d.frequency + 1))
-      .attr('stroke-opacity', (d) => (flashingEdges?.has(d.pair) ? 1 : 0.5))
+      .attr('stroke-opacity', (d) => {
+        const state = highlightedEdges?.get(d.pair)
+        if (state === 'active') return 1
+        if (state === 'stale') return 0.35
+        return 0.5
+      })
       .attr('stroke-linecap', 'round')
-      .attr('class', (d) => (flashingEdges?.has(d.pair) ? 'edge-flash' : ''))
+      .attr('class', (d) => {
+        const state = highlightedEdges?.get(d.pair)
+        if (state === 'active') return 'edge-flash'
+        if (state === 'stale') return 'edge-stale'
+        return ''
+      })
       .on('mouseenter', (event, d) => {
         // Extract GraphLink-compatible data (source/target may be D3Node objects after simulation)
         const linkData: GraphLink = {
@@ -265,7 +278,7 @@ export function NetworkGraph({
     return () => {
       simulation.stop()
     }
-  }, [liveNodes, liveLinks, mode, handleNodeClick, onNodeHover, flashingEdges, selectedNode])
+  }, [liveNodes, liveLinks, mode, handleNodeClick, onNodeHover, highlightedEdges, selectedNode])
 
   // Historical mode - dynamic simulation based on current snapshot
   useEffect(() => {
@@ -510,17 +523,30 @@ export function NetworkGraph({
       .attr('stroke-width', (d) => (d.id === selectedNode ? 3 : 2.25))
   }, [selectedNode])
 
-  // Update flashing edges without re-creating the simulation
+  // Update highlighted edges without re-creating the simulation
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || !flashingEdges) return
+    if (!svgRef.current || !containerRef.current || !highlightedEdges) return
 
     containerRef.current
       .select('.links')
       .selectAll<SVGLineElement, D3Link>('line')
-      .attr('stroke', (d) => (flashingEdges.has(d.pair) ? '#facc15' : '#6b7280'))
-      .attr('stroke-opacity', (d) => (flashingEdges.has(d.pair) ? 1 : 0.5))
-      .attr('class', (d) => (flashingEdges.has(d.pair) ? 'edge-flash' : ''))
-  }, [flashingEdges])
+      .attr('stroke', (d) => {
+        const state = highlightedEdges.get(d.pair)
+        return state ? '#facc15' : '#6b7280'
+      })
+      .attr('stroke-opacity', (d) => {
+        const state = highlightedEdges.get(d.pair)
+        if (state === 'active') return 1
+        if (state === 'stale') return 0.35
+        return 0.5
+      })
+      .attr('class', (d) => {
+        const state = highlightedEdges.get(d.pair)
+        if (state === 'active') return 'edge-flash'
+        if (state === 'stale') return 'edge-stale'
+        return ''
+      })
+  }, [highlightedEdges])
 
   return (
     <div className="relative h-full w-full">

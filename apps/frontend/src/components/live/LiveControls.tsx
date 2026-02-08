@@ -13,6 +13,8 @@ interface LiveControlsProps {
   onClear: () => void
   status: ConnectionStatusType
   onReconnect: () => void
+  staleMinutes: number
+  onStaleMinutesChange: (minutes: number) => void
 }
 
 export function LiveControls({
@@ -23,6 +25,8 @@ export function LiveControls({
   onClear,
   status,
   onReconnect,
+  staleMinutes,
+  onStaleMinutesChange,
 }: LiveControlsProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -112,6 +116,23 @@ export function LiveControls({
             min={1}
             max={100000}
           />
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        {/* Stale minutes control */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">Stale</label>
+          <div className="w-24">
+            <Slider
+              value={[staleMinutes]}
+              min={1}
+              max={30}
+              step={1}
+              onValueChange={([v]) => onStaleMinutesChange(v)}
+            />
+          </div>
+          <span className="w-12 font-mono text-sm">{staleMinutes}m</span>
         </div>
       </div>
     </div>

@@ -22,7 +22,7 @@ export function formatUsd(value: number): string {
   return `$${formatNumber(value)}`
 }
 
-export function formatPercent(value: number, decimals = 3): string {
+export function formatPercent(value: number, decimals = 2): string {
   return `${value.toFixed(decimals)}%`
 }
 

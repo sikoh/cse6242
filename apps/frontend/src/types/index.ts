@@ -204,6 +204,20 @@ export interface TradeStep {
   quantity: number
 }
 
+export interface DedupedOpportunity {
+  id: string
+  dedupKey: string
+  timestamp: number
+  triangleKey: string
+  currA: string
+  currB: string
+  currC: string
+  direction: 'forward' | 'reverse'
+  profitPct: number
+  volumeUsd: number
+  count: number
+}
+
 // Binance types
 export interface BinanceSymbol {
   symbol: string
@@ -239,7 +253,15 @@ export interface WorkerConfigMessage {
   payload: LiveConfig
 }
 
-export type WorkerInboundMessage = WorkerInitMessage | WorkerPriceMessage | WorkerConfigMessage
+export interface WorkerRequestPriceMapMessage {
+  type: 'REQUEST_PRICE_MAP'
+}
+
+export type WorkerInboundMessage =
+  | WorkerInitMessage
+  | WorkerPriceMessage
+  | WorkerConfigMessage
+  | WorkerRequestPriceMapMessage
 
 export interface WorkerOpportunityResult {
   type: 'OPPORTUNITY'
@@ -254,7 +276,24 @@ export interface WorkerStatsResult {
   }
 }
 
-export type WorkerOutboundMessage = WorkerOpportunityResult | WorkerStatsResult
+export interface PriceMapEntry {
+  symbol: string
+  bid: number
+  ask: number
+  bidQty: number
+  askQty: number
+  lastUpdate: number
+}
+
+export interface WorkerPriceMapResult {
+  type: 'PRICE_MAP'
+  payload: PriceMapEntry[]
+}
+
+export type WorkerOutboundMessage =
+  | WorkerOpportunityResult
+  | WorkerStatsResult
+  | WorkerPriceMapResult
 
 // Graph types for D3
 export interface Triangle {
