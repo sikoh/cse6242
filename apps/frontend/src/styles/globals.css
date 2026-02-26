@@ -85,13 +85,11 @@ body {
 }
 
 .edge-flash {
-  stroke: #facc15 !important;
   animation: edge-flash 0.5s ease-in-out;
 }
 
 .edge-stale {
-  stroke: #facc15 !important;
-  stroke-opacity: 0.35 !important;
+  /* color and opacity controlled by D3 inline attributes */
 }
 
 /* Triangle highlight animation */
