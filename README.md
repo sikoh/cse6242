@@ -1,305 +1,229 @@
 # Triangular Arbitrage Visualization
 
-A full-stack web application for detecting and visualizing triangular arbitrage opportunities in cryptocurrency markets. Features both historical data analysis (2017-2022) and real-time opportunity detection with Binance integration.
+A full-stack web application for detecting and visualizing triangular arbitrage opportunities in cryptocurrency markets. Features both historical data analysis (2017–2022) and real-time client-side opportunity detection via Binance WebSocket streams integration.
 
-**Stack**: React + TypeScript (Frontend, Vite), Express + Node.js (Backend, TypeScript), PostgreSQL (GCP), Prisma ORM
+**Stack**: React 19, Vite 6, Express 5, Node 18+, PostgreSQL, Prisma 7, D3.js v7
 
-## Project Overview
+## Key Features
 
-This monorepo contains:
-
-- **Frontend**: React dashboard with D3.js network visualization, supporting historical and live modes
-- **Backend**: Express REST API and WebSocket support for serving arbitrage opportunity data
-- **Database**: PostgreSQL instance hosting 1M+ historical triangle opportunities with rich liquidity/volatility metrics
-
-### Key Features
-
-- 📊 **Historical Mode**: Explore 2017-2022 triangular arbitrage data with time slider, filters, and network graph
-- 🔴 **Live Mode**: Real-time opportunity detection from Binance WebSocket streams (using Web Workers)
-- 📈 **Network Visualization**: D3.js force-directed graph showing currency relationships and trade flows
-- 💡 **Advanced Analytics**: Profit metrics, volume data, volatility measures, and liquidity analysis
-- 🎨 **Modern UI**: Tailwind CSS + Shadcn UI components, responsive design, dark theme support
+- 📊 **Historical Mode** — Explore 2017–2022 triangular arbitrage data with animated graph playback, time-series charts, summary stats, and drill-down detail panels
+- 🔴 **Live Mode** — Real-time opportunity detection from Binance book ticker WebSocket streams, powered by a dedicated Web Worker for off-main-thread arbitrage scanning
+- 📈 **Network Visualization** — D3.js force-directed graph with animated snapshot transitions (historical) and live edge highlighting with profit/stale color coding (live)
+- 💡 **Advanced Analytics** — Profit metrics, volume data, volatility measures (24h/7d/30d), and per-pair liquidity analysis stored in 1M+ enriched opportunity rows
+- 🎨 **Modern UI** — Dark theme, Tailwind CSS v4 + Shadcn/Radix UI components, skeleton loading states, responsive grid layout, persisted user preferences
 
 ## Prerequisites
 
-- **Node.js** 18+ and **pnpm** 9+ (monorepo package manager)
-- **PostgreSQL** connection credentials (for backend database access)
+- **Node.js** 18+ and **pnpm** 9+
+- **PostgreSQL** connection credentials (for historical mode backend)
 - Internet connection (for Binance API access in live mode)
 
-### Install Node.js & pnpm
-
 ```bash
-# Check if Node.js is installed
-node --version  # Should be 18+
-
-# Install pnpm globally
-npm install -g pnpm
-
-# Verify pnpm
-pnpm --version  # Should be 9+
+node --version   # Should be 18+
+pnpm --version   # Should be 9+
 ```
 
 ## Installation
 
-### 1. Clone & Install Dependencies
+### 1. Install Dependencies
 
 ```bash
-# Navigate to project root
-cd /path/to/cse6242
-
-# Install all workspace dependencies
 pnpm install
 ```
 
-This will install dependencies for both frontend and backend using the pnpm workspace configuration.
+Installs dependencies for both frontend and backend via pnpm workspaces. Prisma client is generated automatically via the backend `postinstall` script.
 
 ### 2. Set Up Environment Variables
 
-#### Backend Configuration
-
-Create `.env` file in `apps/backend/`:
+#### Backend — `apps/backend/.env`
 
 ```env
 # PostgreSQL connection string (GCP instance)
 DATABASE_URL="postgresql://user:password@host:5432/database?schema=public&connection_limit=10"
 
-# Server port
+# Server port (default: 3001)
 PORT=3001
 ```
 
-**Note**: You'll need valid PostgreSQL credentials with access to the `public.vw_triangle_opportunities_enriched` view.
+You need valid PostgreSQL credentials with access to the `public.vw_triangle_opportunities_enriched` view.
 
-#### Frontend Configuration (Optional)
+#### Frontend — `apps/frontend/.env` (optional)
 
-The frontend automatically proxies API calls to `http://localhost:3001` during development (see `apps/frontend/vite.config.ts`). No `.env` file is required for basic setup, but you can create `apps/frontend/.env` if you need to customize:
+The frontend proxies `/api` requests to `http://localhost:3001` during development. No `.env` is required for the default setup. Optional overrides:
 
 ```env
-# API base URL (defaults to /api via Vite proxy in dev)
-VITE_API_URL=http://localhost:3001
-```
-
-### 3. Generate Prisma Client
-
-The backend uses Prisma ORM for type-safe database access:
-
-```bash
-# Generate Prisma client
-pnpm --filter @cse6242/backend db:generate
+VITE_API_URL=http://localhost:3001        # API base URL
+VITE_BINANCE_REST_URL=https://api.binance.us  # Binance REST base
+VITE_BINANCE_WS_URL=wss://stream.binance.us:9443/stream  # Binance WS
 ```
 
 ## Running the Application
 
 ### Development Mode
 
-#### Option 1: Run Both Backend & Frontend Together
-
 ```bash
+# Run both backend & frontend with hot reload
 pnpm dev
+
+# Or individually:
+pnpm dev:backend    # Express server → http://localhost:3001
+pnpm dev:frontend   # Vite dev server → http://localhost:5173
 ```
-
-This runs both servers in parallel with hot-reload enabled:
-
-- **Frontend**: http://localhost:5173 (Vite dev server)
-- **Backend**: http://localhost:3001 (Express server)
-
-#### Option 2: Run Individually
-
-**Backend only** (Terminal 1):
-
-```bash
-pnpm dev:backend
-```
-- Server will start on `http://localhost:3001`
-- Uses `tsx` for TypeScript execution with file watching
-- Health check endpoint: `GET http://localhost:3001/health`
-
-**Frontend only** (Terminal 2):
-```bash
-pnpm dev:frontend
-```
-- Server will start on `http://localhost:5173`
-- Vite provides instant module reload (HMR)
-- API calls proxy to `:3001` (see vite.config.ts)
 
 ### Production Build
 
 ```bash
-# Build both frontend and backend
 pnpm build
-
-# This will:
-# - Compile backend TypeScript → apps/backend/dist/
-# - Build frontend with Vite → apps/frontend/dist/
+# Backend compiles to apps/backend/dist/
+# Frontend builds to apps/frontend/dist/
 ```
 
-### Running Production Build
+## Architecture
 
-**Backend**:
+**Monorepo** managed with pnpm workspaces (`apps/backend`, `apps/frontend`).
 
-```bash
-# From apps/backend/
-node dist/index.js
+### Historical Mode — Data Flow
+
+```
+Header (date range + bin controls)
+  → AppContext (shared state)
+    → useSummary()         → SummaryCards + TimeSeriesChart
+    → useGraphTimeline()   → NetworkGraph (snapshot animation)
+    → GraphPlaybackControls (play/pause, step, speed, scrub)
+    → Node click → useTriangles(currency) → DetailPanel (slide-out)
 ```
 
-**Frontend**
-The built frontend is a static SPA that can be served by:
+All historical data is served by the Express backend, which queries a PostgreSQL view containing ~1M pre-computed triangular arbitrage opportunities with volatility and liquidity metrics.
 
-- A static file server (e.g., `pnpm add -g serve` then `serve dist/`)
-- The Express backend (configure static middleware)
-- A CDN or external hosting
+### Live Mode — Data Flow
+
+```
+useBinanceExchangeInfo(selectedCoins)
+  → derives pairs, builds adjacency list, enumerates triangles
+useBinanceWebSocket(pairs)
+  → BookTicker messages via Binance combined stream (up to 300 pairs)
+useArbitrageDetection(triangles, config)
+  → Web Worker maintains price map, checks all triangles (fwd + rev)
+  → Opportunities deduped by triangle+direction+rounded profit
+  → OpportunityFeed (grouped, sorted) + NetworkGraph (edge highlighting)
+```
+
+Live mode is **entirely client-side** — no backend required. The arbitrage detection runs in a dedicated Web Worker to keep the UI responsive.
+
+## API Endpoints
+
+Base URL: `http://localhost:3001/api/historical`
+
+| Method | Endpoint          | Description                                                    |
+| ------ | ----------------- | -------------------------------------------------------------- |
+| `GET`  | `/health`         | Server health check (root-level, not under `/api`)             |
+| `GET`  | `/summary`        | Aggregate stats, top triangles, and time-series data           |
+| `GET`  | `/graph`          | Network graph nodes & links for D3 visualization               |
+| `GET`  | `/graph-timeline` | Bulk graph snapshots for animated playback (by day/month/year) |
+| `GET`  | `/triangles`      | Paginated triangle details filtered by currency                |
+| `GET`  | `/opportunities`  | Paginated raw opportunity rows with optional filters           |
+
+All endpoints accept `startDate` and `endDate` query parameters (ISO date strings, default `2017-01-01` to `2022-12-31`). Request validation uses Zod schemas; invalid parameters return structured 400 errors.
 
 ## Project Structure
 
 ```
 cse6242/                          # Monorepo root
 ├── apps/
-│   ├── backend/                  # Express API server
+│   ├── backend/                  # Express 5 API server
 │   │   ├── prisma/
-│   │   │   └── schema.prisma     # Prisma ORM schema
-│   │   ├── src/
-│   │   │   ├── index.ts          # Express app entry point
-│   │   │   ├── routes/           # API route handlers
-│   │   │   ├── services/         # Business logic & DB queries
-│   │   │   ├── lib/              # Utilities (Prisma client)
-│   │   │   └── types/            # TypeScript type definitions
-│   │   ├── package.json
-│   │   └── tsconfig.json
+│   │   │   └── schema.prisma     # Prisma schema (PostgreSQL view)
+│   │   └── src/
+│   │       ├── index.ts          # Express app entry point
+│   │       ├── routes/           # API route handlers
+│   │       ├── services/         # Business logic & raw SQL queries
+│   │       ├── lib/              # Prisma client setup (pg adapter)
+│   │       └── types/            # Zod schemas & TypeScript types
 │   │
-│   └── frontend/                 # React dashboard (Vite)
-│       ├── src/
-│       │   ├── main.tsx          # React DOM mount
-│       │   ├── App.tsx           # Root component + providers
-│       │   ├── components/       # React components
-│       │   │   ├── ui/           # Shadcn UI components
-│       │   │   ├── layout/       # Header, footer, mode toggle
-│       │   │   ├── graph/        # D3 network visualization
-│       │   │   ├── historical/   # Time slider, summary cards
-│       │   │   ├── live/         # WebSocket, real-time feed
-│       │   │   └── shared/       # Detail panel, tables
-│       │   ├── hooks/            # React hooks (data fetching, WebSocket)
-│       │   ├── workers/          # Web Worker (arbitrage detection)
-│       │   ├── lib/              # Utilities (API client, D3 helpers)
-│       │   ├── types/            # TypeScript definitions
-│       │   └── styles/           # Tailwind CSS
-│       ├── vite.config.ts        # Vite + API proxy config
-│       ├── index.html
-│       └── package.json
+│   └── frontend/                 # React 19 SPA (Vite 6)
+│       └── src/
+│           ├── App.tsx           # Providers (QueryClient, Router, AppContext)
+│           ├── components/
+│           │   ├── ui/           # Shadcn/Radix primitives (13 components)
+│           │   ├── layout/       # Header, ModeToggle, RootLayout, Disclaimer
+│           │   ├── graph/        # NetworkGraph, GraphControls, GraphTooltip
+│           │   ├── historical/   # SummaryCards, TimeSeriesChart, PlaybackControls
+│           │   ├── live/         # LiveDashboard, OpportunityFeed, drawers
+│           │   └── shared/       # DetailPanel, TriangleTable
+│           ├── hooks/            # Data fetching, WebSocket, arbitrage detection
+│           ├── workers/          # Web Worker for arbitrage scanning
+│           ├── context/          # AppContext (mode, date range, selections)
+│           ├── lib/              # API client, graph utils, arbitrage math
+│           ├── routes/           # TanStack Router config
+│           ├── types/            # Frontend TypeScript definitions
+│           └── styles/           # Tailwind CSS entry point
 │
-├── docs/                         # Technical documentation
-│   ├── README.md                 # Documentation index
-│   ├── backend-spec.md           # API & database schema details
-│   ├── frontend-spec.md          # Component architecture & data flow
-│   ├── live-dashboard-spec.md    # WebSocket & detection algorithm
-│   ├── historical-graph-backend.md
-│   ├── db-postgres.md            # PostgreSQL schema reference
-│   └── wireframes/               # ASCII UI mockups
-│
-├── package.json                  # Root workspace config
-├── pnpm-workspace.yaml           # pnpm monorepo setup
+├── package.json                  # Root workspace scripts
+├── pnpm-workspace.yaml           # Workspace config
 ├── tsconfig.base.json            # Shared TypeScript config
-├── biome.jsonc                   # Code linting & formatting
-└── pnpm-lock.yaml                # Dependency lock file
+└── biome.jsonc                   # Linting & formatting
 ```
-
-## API Endpoints
-
-Base URL (development): `http://localhost:3001/api/historical`
-
-### Key Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Server health check |
-| `GET` | `/summary` | Dashboard stats (total opportunities, avg profit, top triangles) |
-| `GET` | `/graph` | Network graph data (nodes & links for D3 visualization) |
-| `GET` | `/triangles` | List of triangle opportunities with filters |
-| `GET` | `/triangles/:id` | Detail view for a specific triangle opportunity |
-
-**Query Parameters**: All endpoints accept `startDate` and `endDate` (ISO format) for date range filtering.
-
-See [docs/backend-spec.md](./docs/backend-spec.md) for complete API documentation.
 
 ## Tech Stack
 
 ### Frontend
-- **React 18**: UI framework
-- **TypeScript**: Type safety
-- **Vite**: Fast bundler and dev server
-- **TanStack Router/Query/Table**: Routing, data fetching, tables
-- **D3.js**: Network graph visualization
-- **Tailwind CSS**: Styling
-- **Shadcn UI**: Component library
-- **Recharts**: Time series charts
+
+| Library         | Purpose                                                          |
+| --------------- | ---------------------------------------------------------------- |
+| React 19        | UI framework                                                     |
+| TanStack Router | Client-side routing with type-safe route tree                    |
+| TanStack Query  | Server state, caching, infinite queries (5-min stale)            |
+| TanStack Table  | Headless table utilities                                         |
+| D3.js v7        | Force-directed graph (simulation, zoom, drag, scales)            |
+| Recharts        | Time-series composed charts (area + line, dual axes)             |
+| Radix UI        | Headless primitives (Sheet, Select, Slider, Tabs, Tooltip, etc.) |
+| Tailwind CSS v4 | Utility-first styling via `@tailwindcss/vite` plugin             |
+| Lucide React    | Icon library                                                     |
+| date-fns        | Date formatting                                                  |
+| Vite 6          | Build tool with native Web Worker support                        |
 
 ### Backend
-- **Express.js**: REST API framework
-- **TypeScript**: Type safety
-- **Prisma ORM**: Database abstraction
-- **PostgreSQL**: Main database
-- **Node.js**: Runtime
+
+| Library         | Purpose                                    |
+| --------------- | ------------------------------------------ |
+| Express 5       | REST API framework                         |
+| Prisma 7        | ORM with `@prisma/adapter-pg` for raw Pool |
+| PostgreSQL (pg) | Database driver with connection pooling    |
+| Zod 4           | Request validation schemas                 |
+| dotenv          | Environment variable loading               |
+| tsx             | TypeScript execution with file watching    |
 
 ### Development Tools
-- **pnpm**: Package manager (monorepo support)
-- **Biome**: Fast linting & formatting
-- **TSX**: TypeScript execution with hot reload
-- **TypeScript**: Type checking
 
-## Contributing & Development
+| Tool       | Purpose                         |
+| ---------- | ------------------------------- |
+| pnpm       | Monorepo package manager        |
+| Biome      | Fast linting & formatting       |
+| TypeScript | Type checking across workspaces |
+
+## Development
 
 ### Code Quality
 
 ```bash
-# Type check both frontend and backend
-pnpm typecheck
-
-# Lint code with Biome
-pnpm lint
-
-# Auto-format code with Biome
-pnpm format
+pnpm typecheck   # Type-check both frontend and backend
+pnpm check       # Biome lint + format check
+pnpm lint        # Lint only
+pnpm format      # Auto-fix formatting
 ```
 
-### Debugging
+### Regenerate Prisma Client
 
-**Backend**: The backend uses TypeScript with source maps. Use your IDE's debugger or Node.js inspector:
 ```bash
-node --inspect dist/index.js
+pnpm --filter @cse6242/backend db:generate
 ```
-
-**Frontend**: Use React Developer Tools browser extension and Vite's built-in source maps.
 
 ## Troubleshooting
 
-### Backend fails to start
-- **Error**: `DATABASE_URL is not set`
-  - **Solution**: Create `.env` in `apps/backend/` with valid PostgreSQL connection string
-  
-- **Error**: `ECONNREFUSED 127.0.0.1:5432`
-  - **Solution**: Verify PostgreSQL is running and credentials in `DATABASE_URL` are correct
-
-### Frontend shows "API connection error"
-- **Check**: Is backend running on `http://localhost:3001`?
-- **Check**: Is `CORS` enabled in backend (should be by default)?
-- **Solution**: Open browser dev tools Network tab to see actual error
-
-### Port already in use
-- **Frontend (5173)**: `pnpm dev:frontend -- --port 5174`
-- **Backend (3001)**: `PORT=3002 pnpm dev:backend`
-
-## Documentation
-
-For detailed technical information:
-
-- 📘 [Frontend Specification](./docs/frontend-spec.md) - Component architecture, data flow, feature details
-- 📗 [Backend Specification](./docs/backend-spec.md) - API endpoints, database schema, routes
-- 📙 [Live Dashboard Spec](./docs/live-dashboard-spec.md) - WebSocket integration, real-time detection
-- 📕 [PostgreSQL Schema](./docs/db-postgres.md) - Database table structure and relationships
-- 🎨 [UI Wireframes](./docs/wireframes/) - ASCII mockups of dashboard layouts
-
-## License
-
-This project is part of CSE6242 (Data Visualization) at Georgia Tech.
-
-## Support
-
-For questions or issues, refer to [docs/issues.md](./docs/issues.md) or check existing documentation in the `docs/` folder.
+| Problem                         | Solution                                                             |
+| ------------------------------- | -------------------------------------------------------------------- |
+| `DATABASE_URL is not set`       | Create `apps/backend/.env` with a valid PostgreSQL connection string |
+| `ECONNREFUSED` on backend start | Verify PostgreSQL is reachable and credentials are correct           |
+| Frontend API errors             | Ensure backend is running on `http://localhost:3001`                 |
+| Port conflict (5173)            | `pnpm dev:frontend -- --port 5174`                                   |
+| Port conflict (3001)            | `PORT=3002 pnpm dev:backend`                                         |
