@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatNumber, formatPercent, formatRelativeTime } from '@/lib/utils'
-import type { DedupedOpportunity } from '@/types'
+import type { DedupedOpportunity, OpportunityCategory } from '@/types'
 
 interface TriangleGroup {
   groupKey: string
@@ -12,6 +12,7 @@ interface TriangleGroup {
   currB: string
   currC: string
   direction: 'forward' | 'reverse'
+  category: OpportunityCategory
   latestTimestamp: number
   totalVolume: number
   /** Volume-weighted average profit */
@@ -32,6 +33,7 @@ function buildGroups(opportunities: DedupedOpportunity[]): TriangleGroup[] {
         currB: opp.currB,
         currC: opp.currC,
         direction: opp.direction,
+        category: opp.category,
         latestTimestamp: opp.timestamp,
         totalVolume: 0,
         avgProfit: 0,
@@ -57,8 +59,13 @@ function buildGroups(opportunities: DedupedOpportunity[]): TriangleGroup[] {
     }
   }
 
-  // Sort groups by latest timestamp descending
-  return Array.from(map.values()).sort((a, b) => b.latestTimestamp - a.latestTimestamp)
+  // Sort: profitable groups first, then near-miss; within each category by timestamp desc
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.category !== b.category) {
+      return a.category === 'profitable' ? -1 : 1
+    }
+    return b.latestTimestamp - a.latestTimestamp
+  })
 }
 
 interface OpportunityFeedProps {
@@ -111,15 +118,13 @@ export function OpportunityFeed({ opportunities }: OpportunityFeedProps) {
 function GroupRow({ group }: { group: TriangleGroup }) {
   const [expanded, setExpanded] = useState(false)
 
-  const profitColor =
-    group.avgProfit > 0.5
-      ? 'text-emerald-500'
-      : group.avgProfit > 0.2
-        ? 'text-green-500'
-        : 'text-lime-500'
+  const isNearMiss = group.category === 'near-miss'
+  const profitColor = isNearMiss ? 'text-amber-400' : 'text-green-400/70'
+  const borderColor = isNearMiss ? 'border-l-amber-400/50' : 'border-l-green-400/30'
+  const profitPrefix = isNearMiss ? '' : '+'
 
   return (
-    <div>
+    <div className={`border-l-2 ${borderColor}`}>
       <button
         type="button"
         className="flex w-full items-center justify-between px-3 py-2 transition-colors hover:bg-muted/40"
@@ -159,7 +164,8 @@ function GroupRow({ group }: { group: TriangleGroup }) {
           </div>
         </div>
         <div className={`text-right font-mono text-base font-semibold ${profitColor}`}>
-          +{formatPercent(group.avgProfit)}
+          {profitPrefix}
+          {formatPercent(group.avgProfit)}
         </div>
       </button>
 
@@ -175,12 +181,9 @@ function GroupRow({ group }: { group: TriangleGroup }) {
 }
 
 function OpportunityItem({ opportunity }: { opportunity: DedupedOpportunity }) {
-  const profitColor =
-    opportunity.profitPct > 0.5
-      ? 'text-emerald-500'
-      : opportunity.profitPct > 0.2
-        ? 'text-green-500'
-        : 'text-lime-500'
+  const isNearMiss = opportunity.category === 'near-miss'
+  const profitColor = isNearMiss ? 'text-amber-400' : 'text-green-400/70'
+  const profitPrefix = isNearMiss ? '' : '+'
 
   return (
     <div className="flex items-center justify-between px-3 py-1.5 pl-7 hover:bg-muted/40">
@@ -196,7 +199,8 @@ function OpportunityItem({ opportunity }: { opportunity: DedupedOpportunity }) {
         )}
       </div>
       <div className={`font-mono text-sm font-semibold ${profitColor}`}>
-        +{formatPercent(opportunity.profitPct)}
+        {profitPrefix}
+        {formatPercent(opportunity.profitPct)}
       </div>
     </div>
   )

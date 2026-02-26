@@ -115,6 +115,7 @@ export function useArbitrageDetection({
             currC: opp.currC,
             direction: opp.direction,
             profitPct: profitRounded,
+            category: opp.category,
             volumeUsd: volume,
             count: 1,
           }

@@ -9,9 +9,10 @@ import { useArbitrageDetection } from '@/hooks/useArbitrageDetection'
 import { useBinanceExchangeInfo } from '@/hooks/useBinanceExchangeInfo'
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket'
 import { useElapsedTime } from '@/hooks/useElapsedTime'
+import { usePersistedState } from '@/hooks/usePersistedState'
 import { DEFAULT_QUOTE_CURRENCIES } from '@/lib/graph'
 import { formatNumber } from '@/lib/utils'
-import type { BookTickerMessage, LiveConfig } from '@/types'
+import type { BookTickerMessage, LiveConfig, OpportunityCategory } from '@/types'
 import { CoinSelector } from './CoinSelector'
 import { LiveControls } from './LiveControls'
 import { OpportunityFeed } from './OpportunityFeed'
@@ -23,19 +24,24 @@ import { TrianglesDrawer } from './TrianglesDrawer'
 export function LiveDashboard() {
   const { selectedNode, openNodeDetail } = useAppContext()
   const [isPaused, setIsPaused] = useState(false)
-  const [config, setConfig] = useState<LiveConfig>({
+  const [config, setConfig] = usePersistedState<LiveConfig>('live:config', {
     fee: 0.1,
     minProfit: 0.05,
     notional: 1000,
+    nearMissFloor: -0.5,
   })
-  const [staleMinutes, setStaleMinutes] = useState(5)
-  const [selectedCoins, setSelectedCoins] = useState<string[]>(DEFAULT_QUOTE_CURRENCIES)
+  const [showNearMisses, setShowNearMisses] = usePersistedState('live:showNearMisses', false)
+  const [staleMinutes, setStaleMinutes] = usePersistedState('live:staleMinutes', 5)
+  const [selectedCoins, setSelectedCoins] = usePersistedState<string[]>(
+    'live:selectedCoins',
+    DEFAULT_QUOTE_CURRENCIES
+  )
   const [coinSelectorOpen, setCoinSelectorOpen] = useState(false)
   const [pairsDrawerOpen, setPairsDrawerOpen] = useState(false)
   const [trianglesDrawerOpen, setTrianglesDrawerOpen] = useState(false)
   const [priceMapDrawerOpen, setPriceMapDrawerOpen] = useState(false)
   const [streamsDrawerOpen, setStreamsDrawerOpen] = useState(false)
-  const [showActiveOnly, setShowActiveOnly] = useState(true)
+  const [showActiveOnly, setShowActiveOnly] = usePersistedState('live:showActiveOnly', true)
 
   const {
     allCoins,
@@ -84,7 +90,7 @@ export function LiveDashboard() {
       setSelectedCoins(coins)
       clearOpportunities()
     },
-    [clearOpportunities]
+    [clearOpportunities, setSelectedCoins]
   )
 
   const opportunitiesDisplay =
@@ -99,35 +105,62 @@ export function LiveDashboard() {
     return map
   }, [triangles])
 
+  // Filter opportunities for display based on near-miss toggle
+  const displayedOpportunities = useMemo(
+    () =>
+      showNearMisses
+        ? dedupedOpportunities
+        : dedupedOpportunities.filter((opp) => opp.category === 'profitable'),
+    [dedupedOpportunities, showNearMisses]
+  )
+
   // Derive highlighted edges from dedupedOpportunities — the same data
   // backing the grouped feed. If a group exists, its edges stay highlighted.
   // Staleness is based on each triangle's most recent opportunity timestamp.
   const highlightedEdges = useMemo(() => {
-    // Collect the latest timestamp per triangle key across all deduped entries
-    const latestByTriangle = new Map<string, number>()
+    // Collect the latest timestamp + category per triangle key
+    const latestByTriangle = new Map<string, { timestamp: number; category: OpportunityCategory }>()
     for (const opp of dedupedOpportunities) {
-      const prev = latestByTriangle.get(opp.triangleKey) ?? 0
-      if (opp.timestamp > prev) {
-        latestByTriangle.set(opp.triangleKey, opp.timestamp)
+      if (!showNearMisses && opp.category === 'near-miss') continue
+      const prev = latestByTriangle.get(opp.triangleKey)
+      if (!prev || opp.timestamp > prev.timestamp) {
+        latestByTriangle.set(opp.triangleKey, {
+          timestamp: opp.timestamp,
+          // If this triangle has any profitable entry, keep it profitable
+          category: prev?.category === 'profitable' ? 'profitable' : opp.category,
+        })
+      }
+      // Upgrade category to profitable if any entry is profitable
+      if (prev && opp.category === 'profitable') {
+        prev.category = 'profitable'
       }
     }
 
-    const edges = new Map<string, 'active' | 'stale'>()
+    const edges = new Map<string, { status: 'active' | 'stale'; category: OpportunityCategory }>()
     const staleMs = staleMinutes * 60_000
     const now = Date.now()
 
-    for (const [triangleKey, timestamp] of latestByTriangle) {
+    // Priority order: profitable-active > near-miss-active > profitable-stale > near-miss-stale
+    const priority = (status: 'active' | 'stale', category: OpportunityCategory): number => {
+      if (category === 'profitable' && status === 'active') return 4
+      if (category === 'near-miss' && status === 'active') return 3
+      if (category === 'profitable' && status === 'stale') return 2
+      return 1 // near-miss stale
+    }
+
+    for (const [triangleKey, info] of latestByTriangle) {
       const triPairs = triangleLookup.get(triangleKey)
       if (!triPairs) continue
-      const status = now - timestamp <= staleMs ? 'active' : 'stale'
+      const status: 'active' | 'stale' = now - info.timestamp <= staleMs ? 'active' : 'stale'
+      const newPriority = priority(status, info.category)
       for (const pair of triPairs) {
-        // Only upgrade: if already active, don't downgrade to stale
-        if (edges.get(pair) === 'active') continue
-        edges.set(pair, status)
+        const existing = edges.get(pair)
+        if (existing && priority(existing.status, existing.category) >= newPriority) continue
+        edges.set(pair, { status, category: info.category })
       }
     }
     return edges
-  }, [dedupedOpportunities, triangleLookup, staleMinutes])
+  }, [dedupedOpportunities, triangleLookup, staleMinutes, showNearMisses])
 
   // Build graph data from triangles + dedupedOpportunities (true cumulatives)
   const graphData = useMemo(() => {
@@ -251,6 +284,8 @@ export function LiveDashboard() {
         onReconnect={reconnect}
         staleMinutes={staleMinutes}
         onStaleMinutesChange={setStaleMinutes}
+        showNearMisses={showNearMisses}
+        onShowNearMissesChange={setShowNearMisses}
       />
 
       {/* Stats bar */}
@@ -330,7 +365,7 @@ export function LiveDashboard() {
 
         {/* Opportunity feed */}
         <div className="lg:col-span-1">
-          <OpportunityFeed opportunities={dedupedOpportunities} />
+          <OpportunityFeed opportunities={displayedOpportunities} />
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import type {
   BookTickerMessage,
   LiveConfig,
   LiveOpportunity,
+  OpportunityCategory,
   PriceMapEntry,
   TradeStep,
   Triangle,
@@ -19,7 +20,7 @@ interface PriceData {
 
 // Worker state
 let triangles: Triangle[] = []
-let config: LiveConfig = { fee: 0.1, minProfit: 0.1, notional: 100 }
+let config: LiveConfig = { fee: 0.1, minProfit: 0.1, notional: 100, nearMissFloor: -0.5 }
 const priceMap = new Map<string, PriceData>()
 let checksPerSecond = 0
 let lastStatsTime = Date.now()
@@ -92,49 +93,52 @@ function checkOpportunities() {
     self.postMessage(statsMessage)
   }
 
-  // Check each triangle in both directions
-  // Reject profits > 10% as they indicate calculation errors (real arb is typically < 1%)
-  const MAX_REASONABLE_PROFIT = 10
-
   for (const triangle of triangles) {
     const forwardResult = calculateTriangleProfit(triangle, 'forward')
-    if (
-      forwardResult &&
-      forwardResult.profit > config.minProfit &&
-      forwardResult.profit < MAX_REASONABLE_PROFIT
-    ) {
-      const opportunity = createOpportunity(
-        triangle,
-        'forward',
-        forwardResult.profit,
-        forwardResult.steps
-      )
-      const message: WorkerOutboundMessage = {
-        type: 'OPPORTUNITY',
-        payload: opportunity,
+    if (forwardResult) {
+      const category = categorizeProfit(forwardResult.profit)
+      if (category) {
+        const opportunity = createOpportunity(
+          triangle,
+          'forward',
+          forwardResult.profit,
+          forwardResult.steps,
+          category
+        )
+        const message: WorkerOutboundMessage = {
+          type: 'OPPORTUNITY',
+          payload: opportunity,
+        }
+        self.postMessage(message)
       }
-      self.postMessage(message)
     }
 
     const reverseResult = calculateTriangleProfit(triangle, 'reverse')
-    if (
-      reverseResult &&
-      reverseResult.profit > config.minProfit &&
-      reverseResult.profit < MAX_REASONABLE_PROFIT
-    ) {
-      const opportunity = createOpportunity(
-        triangle,
-        'reverse',
-        reverseResult.profit,
-        reverseResult.steps
-      )
-      const message: WorkerOutboundMessage = {
-        type: 'OPPORTUNITY',
-        payload: opportunity,
+    if (reverseResult) {
+      const category = categorizeProfit(reverseResult.profit)
+      if (category) {
+        const opportunity = createOpportunity(
+          triangle,
+          'reverse',
+          reverseResult.profit,
+          reverseResult.steps,
+          category
+        )
+        const message: WorkerOutboundMessage = {
+          type: 'OPPORTUNITY',
+          payload: opportunity,
+        }
+        self.postMessage(message)
       }
-      self.postMessage(message)
     }
   }
+}
+
+function categorizeProfit(profit: number): OpportunityCategory | null {
+  const MAX_REASONABLE_PROFIT = 10
+  if (profit > config.minProfit && profit < MAX_REASONABLE_PROFIT) return 'profitable'
+  if (profit >= config.nearMissFloor && profit <= 0) return 'near-miss'
+  return null
 }
 
 function calculateTriangleProfit(
@@ -183,7 +187,8 @@ function createOpportunity(
   triangle: Triangle,
   direction: 'forward' | 'reverse',
   profit: number,
-  steps: TradeStep[]
+  steps: TradeStep[],
+  category: OpportunityCategory
 ): LiveOpportunity {
   const [currA, currB, currC] = triangle.currencies
   const now = Date.now()
@@ -198,6 +203,7 @@ function createOpportunity(
     currC,
     direction,
     profitPct: profit,
+    category,
     steps,
   }
 }

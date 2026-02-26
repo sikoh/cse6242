@@ -544,9 +544,7 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
         connectedNodeIds.add(link.source)
         connectedNodeIds.add(link.target)
       }
-      const connectedNodes = Array.from(nodes.values()).filter((n) =>
-        connectedNodeIds.has(n.id)
-      )
+      const connectedNodes = Array.from(nodes.values()).filter((n) => connectedNodeIds.has(n.id))
       return {
         date,
         nodes: connectedNodes,

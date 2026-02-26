@@ -1,6 +1,13 @@
 import * as d3 from 'd3'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { D3Link, D3Node, GraphLink, GraphNode, GraphSnapshot } from '@/types'
+import type {
+  D3Link,
+  D3Node,
+  GraphLink,
+  GraphNode,
+  GraphSnapshot,
+  OpportunityCategory,
+} from '@/types'
 import { GraphTooltip } from './GraphTooltip'
 
 interface NetworkGraphProps {
@@ -13,7 +20,7 @@ interface NetworkGraphProps {
   onNodeClick: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   mode: 'historical' | 'live'
-  highlightedEdges?: Map<string, 'active' | 'stale'>
+  highlightedEdges?: Map<string, { status: 'active' | 'stale'; category: OpportunityCategory }>
 }
 
 interface TooltipData {
@@ -24,6 +31,38 @@ interface TooltipData {
 }
 
 const TRANSITION_DURATION = 300
+
+function edgeColor(
+  state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
+): string {
+  if (!state) return '#6b7280'
+  return state.category === 'near-miss' ? '#fbbf24' : '#4ade80'
+}
+
+function edgeOpacity(
+  state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
+): number {
+  if (!state) return 0.5
+  if (state.category === 'near-miss') return state.status === 'active' ? 0.8 : 0.3
+  return state.status === 'active' ? 1 : 0.4
+}
+
+function edgeClass(
+  state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
+): string {
+  if (!state) return ''
+  if (state.status === 'active') return 'edge-flash'
+  return 'edge-stale'
+}
+
+/** Sort order for SVG paint order (higher = rendered on top). */
+function edgeSortOrder(
+  state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
+): number {
+  if (!state) return 0
+  if (state.category === 'near-miss') return state.status === 'active' ? 2 : 1
+  return state.status === 'active' ? 4 : 3 // profitable on top
+}
 
 export function NetworkGraph({
   currentSnapshot,
@@ -175,24 +214,11 @@ export function NetworkGraph({
       .data(d3Links, (d) => d.pair)
       .join('line')
       .attr('data-pair', (d) => d.pair)
-      .attr('stroke', (d) => {
-        const state = highlightedEdges?.get(d.pair)
-        return state ? '#facc15' : '#6b7280'
-      })
+      .attr('stroke', (d) => edgeColor(highlightedEdges?.get(d.pair)))
       .attr('stroke-width', (d) => widthScale(d.frequency + 1))
-      .attr('stroke-opacity', (d) => {
-        const state = highlightedEdges?.get(d.pair)
-        if (state === 'active') return 1
-        if (state === 'stale') return 0.35
-        return 0.5
-      })
+      .attr('stroke-opacity', (d) => edgeOpacity(highlightedEdges?.get(d.pair)))
       .attr('stroke-linecap', 'round')
-      .attr('class', (d) => {
-        const state = highlightedEdges?.get(d.pair)
-        if (state === 'active') return 'edge-flash'
-        if (state === 'stale') return 'edge-stale'
-        return ''
-      })
+      .attr('class', (d) => edgeClass(highlightedEdges?.get(d.pair)))
       .on('mouseenter', (event, d) => {
         // Extract GraphLink-compatible data (source/target may be D3Node objects after simulation)
         const linkData: GraphLink = {
@@ -206,6 +232,18 @@ export function NetworkGraph({
         setTooltip({ type: 'link', data: linkData, x: event.pageX, y: event.pageY })
       })
       .on('mouseleave', () => setTooltip(null))
+
+    // Reorder edges so profitable ones render on top of near-misses
+    if (highlightedEdges) {
+      container
+        .select('.links')
+        .selectAll<SVGLineElement, D3Link>('line')
+        .sort((a, b) => {
+          const aOrder = edgeSortOrder(highlightedEdges.get(a.pair))
+          const bOrder = edgeSortOrder(highlightedEdges.get(b.pair))
+          return aOrder - bOrder
+        })
+    }
 
     // Update nodes - separate enter for structure, then apply handlers to all
     const nodeGroups = container
@@ -527,24 +565,17 @@ export function NetworkGraph({
   useEffect(() => {
     if (!svgRef.current || !containerRef.current || !highlightedEdges) return
 
-    containerRef.current
-      .select('.links')
+    const linksGroup = containerRef.current.select('.links')
+
+    linksGroup
       .selectAll<SVGLineElement, D3Link>('line')
-      .attr('stroke', (d) => {
-        const state = highlightedEdges.get(d.pair)
-        return state ? '#facc15' : '#6b7280'
-      })
-      .attr('stroke-opacity', (d) => {
-        const state = highlightedEdges.get(d.pair)
-        if (state === 'active') return 1
-        if (state === 'stale') return 0.35
-        return 0.5
-      })
-      .attr('class', (d) => {
-        const state = highlightedEdges.get(d.pair)
-        if (state === 'active') return 'edge-flash'
-        if (state === 'stale') return 'edge-stale'
-        return ''
+      .attr('stroke', (d) => edgeColor(highlightedEdges.get(d.pair)))
+      .attr('stroke-opacity', (d) => edgeOpacity(highlightedEdges.get(d.pair)))
+      .attr('class', (d) => edgeClass(highlightedEdges.get(d.pair)))
+      .sort((a, b) => {
+        const aOrder = edgeSortOrder(highlightedEdges.get(a.pair))
+        const bOrder = edgeSortOrder(highlightedEdges.get(b.pair))
+        return aOrder - bOrder
       })
   }, [highlightedEdges])
 

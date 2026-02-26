@@ -109,6 +109,7 @@ export function createOpportunity(
     currC,
     direction,
     profitPct: profit,
+    category: profit > 0 ? 'profitable' : 'near-miss',
     steps,
   }
 }

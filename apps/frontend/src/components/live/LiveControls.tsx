@@ -2,6 +2,7 @@ import { Pause, Play, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 import type { ConnectionStatus as ConnectionStatusType, LiveConfig } from '@/types'
 import { ConnectionStatus } from './ConnectionStatus'
 
@@ -15,6 +16,8 @@ interface LiveControlsProps {
   onReconnect: () => void
   staleMinutes: number
   onStaleMinutesChange: (minutes: number) => void
+  showNearMisses: boolean
+  onShowNearMissesChange: (show: boolean) => void
 }
 
 export function LiveControls({
@@ -27,6 +30,8 @@ export function LiveControls({
   onReconnect,
   staleMinutes,
   onStaleMinutesChange,
+  showNearMisses,
+  onShowNearMissesChange,
 }: LiveControlsProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -74,7 +79,7 @@ export function LiveControls({
         {/* Fee control */}
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground">Fee %</label>
-          <div className="w-32">
+          <div className="w-20">
             <Slider
               value={[config.fee * 10]}
               min={0}
@@ -83,7 +88,7 @@ export function LiveControls({
               onValueChange={([v]) => onConfigChange({ ...config, fee: v / 10 })}
             />
           </div>
-          <span className="w-12 text-sm font-mono">{config.fee.toFixed(2)}%</span>
+          <span className="w-12 font-mono text-sm">{config.fee.toFixed(2)}%</span>
         </div>
 
         <div className="h-6 w-px bg-border" />
@@ -91,7 +96,7 @@ export function LiveControls({
         {/* Min profit control */}
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground">Min Profit</label>
-          <div className="w-32">
+          <div className="w-20">
             <Slider
               value={[config.minProfit * 100]}
               min={0}
@@ -100,7 +105,7 @@ export function LiveControls({
               onValueChange={([v]) => onConfigChange({ ...config, minProfit: v / 100 })}
             />
           </div>
-          <span className="w-12 text-sm font-mono">{config.minProfit.toFixed(2)}%</span>
+          <span className="w-12 font-mono text-sm">{config.minProfit.toFixed(2)}%</span>
         </div>
 
         <div className="h-6 w-px bg-border" />
@@ -112,7 +117,7 @@ export function LiveControls({
             type="number"
             value={config.notional}
             onChange={(e) => onConfigChange({ ...config, notional: Number(e.target.value) })}
-            className="w-24"
+            className="w-20"
             min={1}
             max={100000}
           />
@@ -123,7 +128,7 @@ export function LiveControls({
         {/* Stale minutes control */}
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground">Stale</label>
-          <div className="w-24">
+          <div className="w-16">
             <Slider
               value={[staleMinutes]}
               min={1}
@@ -132,7 +137,32 @@ export function LiveControls({
               onValueChange={([v]) => onStaleMinutesChange(v)}
             />
           </div>
-          <span className="w-12 font-mono text-sm">{staleMinutes}m</span>
+          <span className="w-10 font-mono text-sm">{staleMinutes}m</span>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        {/* Near misses toggle + floor */}
+        <div className="flex items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <span className="text-sm text-muted-foreground">Near Misses</span>
+            <Switch size="sm" checked={showNearMisses} onCheckedChange={onShowNearMissesChange} />
+          </label>
+          <div className="w-16">
+            <Slider
+              value={[config.nearMissFloor * 100]}
+              min={-100}
+              max={0}
+              step={5}
+              disabled={!showNearMisses}
+              onValueChange={([v]) => onConfigChange({ ...config, nearMissFloor: v / 100 })}
+            />
+          </div>
+          <span
+            className={`w-14 font-mono text-sm ${!showNearMisses ? 'text-muted-foreground/50' : ''}`}
+          >
+            {config.nearMissFloor.toFixed(2)}%
+          </span>
         </div>
       </div>
     </div>

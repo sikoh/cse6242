@@ -168,6 +168,7 @@ export interface LiveConfig {
   fee: number
   minProfit: number
   notional: number
+  nearMissFloor: number // e.g. -0.5 (negative percentage)
 }
 
 export interface LiveStats {
@@ -185,6 +186,8 @@ export interface LiveState {
 }
 
 // Live mode types
+export type OpportunityCategory = 'profitable' | 'near-miss'
+
 export interface LiveOpportunity {
   id: string
   timestamp: number
@@ -194,6 +197,7 @@ export interface LiveOpportunity {
   currC: string
   direction: 'forward' | 'reverse'
   profitPct: number
+  category: OpportunityCategory
   steps: TradeStep[]
 }
 
@@ -214,6 +218,7 @@ export interface DedupedOpportunity {
   currC: string
   direction: 'forward' | 'reverse'
   profitPct: number
+  category: OpportunityCategory
   volumeUsd: number
   count: number
 }
