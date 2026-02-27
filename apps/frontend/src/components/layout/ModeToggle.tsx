@@ -8,14 +8,14 @@ export function ModeToggle() {
 
   return (
     <Tabs value={mode} onValueChange={(v) => setMode(v as AppMode)}>
-      <TabsList className="grid w-[200px] grid-cols-2">
+      <TabsList className="grid w-[100px] grid-cols-2 sm:w-[200px]">
         <TabsTrigger value="historical" className="flex items-center gap-1.5">
           <History className="h-3.5 w-3.5" />
-          Historical
+          <span className="hidden sm:inline">Historical</span>
         </TabsTrigger>
         <TabsTrigger value="live" className="flex items-center gap-1.5">
           <Activity className="h-3.5 w-3.5" />
-          Live
+          <span className="hidden sm:inline">Live</span>
         </TabsTrigger>
       </TabsList>
     </Tabs>

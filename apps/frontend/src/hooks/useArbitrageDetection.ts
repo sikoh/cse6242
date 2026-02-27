@@ -73,12 +73,22 @@ export function useArbitrageDetection({
       type: 'module',
     })
 
+    // Reset state when worker is (re-)initialized (config or triangles changed)
+    setOpportunities([])
+    setDedupedOpportunities([])
+    setTotalCount(0)
+    setStartTime(Date.now())
+    dedupEntriesRef.current = new Map()
+    activeKeyRef.current = new Map()
+
     worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
       const { type, payload } = event.data
 
       if (type === 'OPPORTUNITY') {
         const opp = payload as LiveOpportunity
-        setTotalCount((prev) => prev + 1)
+        if (opp.category === 'profitable') {
+          setTotalCount((prev) => prev + 1)
+        }
         setOpportunities((prev) => {
           const next = [opp, ...prev]
           return next.slice(0, MAX_OPPORTUNITIES)

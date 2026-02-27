@@ -264,8 +264,8 @@ export function LiveDashboard() {
       <div className="container mx-auto flex flex-col gap-4 p-4">
         <Skeleton className="h-20" />
         <div className="grid gap-4 lg:grid-cols-3">
-          <Skeleton className="h-[500px] lg:col-span-2" />
-          <Skeleton className="h-[500px]" />
+          <Skeleton className="h-[350px] md:h-[450px] lg:col-span-2 lg:h-[500px]" />
+          <Skeleton className="h-[350px] md:h-[450px] lg:h-125" />
         </div>
       </div>
     )
@@ -340,7 +340,7 @@ export function LiveDashboard() {
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Graph */}
         <div className="lg:col-span-2">
-          <div className="flex h-[500px] flex-col rounded-lg border border-border bg-card">
+          <div className="flex h-[350px] flex-col rounded-lg border border-border bg-card md:h-[450px] lg:h-[500px]">
             <div className="flex-shrink-0 border-b border-border px-4 py-1.5">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-medium">Live Network</h2>

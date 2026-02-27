@@ -35,7 +35,7 @@ export function LiveControls({
 }: LiveControlsProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4 gap-y-2">
         {/* Connection status */}
         <div className="flex items-center gap-2">
           <ConnectionStatus status={status} />
@@ -47,7 +47,7 @@ export function LiveControls({
           ) : null}
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Playback controls */}
         <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export function LiveControls({
           </Button>
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Fee control */}
         <div className="flex items-center gap-2">
@@ -91,7 +91,7 @@ export function LiveControls({
           <span className="w-12 font-mono text-sm">{config.fee.toFixed(2)}%</span>
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Min profit control */}
         <div className="flex items-center gap-2">
@@ -108,7 +108,7 @@ export function LiveControls({
           <span className="w-12 font-mono text-sm">{config.minProfit.toFixed(2)}%</span>
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Notional control */}
         <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export function LiveControls({
           />
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Stale minutes control */}
         <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export function LiveControls({
           <span className="w-10 font-mono text-sm">{staleMinutes}m</span>
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border sm:block" />
 
         {/* Near misses toggle + floor */}
         <div className="flex items-center gap-2">

@@ -84,7 +84,7 @@ export function HistoricalDashboard() {
                 onMinProfitPctChange={setMinProfitPct}
               />
             </div>
-            <div className="h-125">
+            <div className="h-[350px] md:h-[450px] lg:h-125">
               {graphLoading ? (
                 <div className="flex h-full items-center justify-center">
                   <Skeleton className="h-64 w-64 rounded-full" />
@@ -114,7 +114,7 @@ export function HistoricalDashboard() {
             <div className="flex min-h-12 items-center justify-between border-b border-border px-4 py-2">
               <h2 className="text-sm font-medium leading-none">Opportunities Over Time</h2>
             </div>
-            <div className="h-125 p-4">
+            <div className="h-[350px] p-4 md:h-[450px] lg:h-125">
               {summaryLoading ? (
                 <Skeleton className="h-full" />
               ) : summaryData?.data.timeSeries ? (

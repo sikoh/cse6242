@@ -76,10 +76,10 @@ export function OpportunityFeed({ opportunities }: OpportunityFeedProps) {
   const groups = useMemo(() => buildGroups(opportunities), [opportunities])
 
   return (
-    <Card className="flex h-125 flex-col gap-0 overflow-hidden py-0">
+    <Card className="flex h-[350px] flex-col gap-0 overflow-hidden py-0 md:h-[450px] lg:h-125">
       <div className="shrink-0 border-b border-border px-4 py-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold tracking-wide">Live Opportunities</span>
+          <span className="text-sm font-semibold tracking-wide">Live Triangles</span>
           <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs">
             {groups.length}
           </Badge>

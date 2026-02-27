@@ -149,7 +149,7 @@ export function GraphPlaybackControls({
         )}
       </div>
 
-      <div className="min-w-55 flex-1">
+      <div className="min-w-0 flex-1">
         <Slider
           value={[localIndex]}
           min={0}
@@ -161,7 +161,7 @@ export function GraphPlaybackControls({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Speed:</span>
+        <span className="hidden text-sm font-medium sm:inline">Speed:</span>
         <Select value={String(playbackSpeed)} onValueChange={(v) => setPlaybackSpeed(Number(v))}>
           <SelectTrigger className="w-20">
             <SelectValue />
