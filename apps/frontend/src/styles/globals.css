@@ -33,14 +33,14 @@
   --color-destructive-foreground: #ffffff;
 
   --color-success: #22c55e;
-  --color-warning: #eab308;
+  --color-warning: #baa976;
   --color-info: #3b82f6;
 
   /* Graph colors */
   --color-graph-node: #3b82f6;
   --color-graph-node-selected: #22c55e;
   --color-graph-edge: #404050;
-  --color-graph-edge-active: #eab308;
+  --color-graph-edge-active: ##baa976;
 
   --color-ring: #3b82f6;
   --color-input: #2a2a3a;
