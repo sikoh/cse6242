@@ -121,7 +121,7 @@ function GroupRow({ group }: { group: TriangleGroup }) {
   const isNearMiss = group.category === 'near-miss'
   const profitColor = isNearMiss ? '#f5c854' : '#12cf57'
   const borderColor = isNearMiss ? 'border-l-amber-500/50' : 'border-l-green-400/30'
-  const profitPrefix = isNearMiss ? '' : '+'
+  const profitPrefix = isNearMiss || group.avgProfit < 0 ? '' : '+'
 
   return (
     <div className={`border-l-2 ${borderColor}`}>
@@ -186,7 +186,7 @@ function GroupRow({ group }: { group: TriangleGroup }) {
 function OpportunityItem({ opportunity }: { opportunity: DedupedOpportunity }) {
   const isNearMiss = opportunity.category === 'near-miss'
   const profitColor = isNearMiss ? '#f5c854' : '#12cf57'
-  const profitPrefix = isNearMiss ? '' : '+'
+  const profitPrefix = isNearMiss || opportunity.profitPct < 0 ? '' : '+'
 
   return (
     <div className="flex items-center justify-between px-3 py-1.5 pl-7 hover:bg-muted/40">
