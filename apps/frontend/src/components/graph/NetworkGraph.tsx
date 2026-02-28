@@ -36,7 +36,9 @@ function edgeColor(
   state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
 ): string {
   if (!state) return '#6b7280'
-  return state.category === 'near-miss' ? '#fbbf24' : '#4ade80'
+  // return state.category === 'near-miss' ? '#fbbf24' : '#4ade80'
+  // use a slightly darker amber for near-miss edges so they appear less bright
+  return state.category === 'near-miss' ? '#d7c78e' : '#12cf57'
 }
 
 function edgeOpacity(
