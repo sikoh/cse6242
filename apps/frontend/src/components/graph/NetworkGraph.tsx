@@ -317,6 +317,9 @@ export function NetworkGraph({
         (exit) => exit.remove()
       )
 
+    // Update circle colors for ALL nodes (enter + update) based on current nodeColorMap
+    nodeGroups.select('circle').attr('fill', (d) => nodeColorMap.get(d.id) || '#6b7280')
+
     // Apply event handlers to ALL nodes (both new and existing) so they use current data
     nodeGroups
       .call(dragBehavior)
