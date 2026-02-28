@@ -154,7 +154,7 @@ export function NetworkGraph({
 
     // Scales
     const maxVolume = Math.max(...liveNodes.map((n) => n.totalVolumeUsd), 1)
-    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([12, 45])
+    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([12, 20])
     const widthScale = d3
       .scaleLog()
       .domain([1, Math.max(...d3Links.map((l) => l.frequency + 1), 2)])
@@ -317,8 +317,15 @@ export function NetworkGraph({
         (exit) => exit.remove()
       )
 
-    // Update circle colors for ALL nodes (enter + update) based on current nodeColorMap
-    nodeGroups.select('circle').attr('fill', (d) => nodeColorMap.get(d.id) || '#6b7280')
+    // Update circle radius, colors, and text size for ALL nodes (enter + update) when data changes
+    nodeGroups
+      .select('circle')
+      .attr('r', (d) => radiusScale(d.totalVolumeUsd))
+      .attr('fill', (d) => nodeColorMap.get(d.id) || '#6b7280')
+
+    nodeGroups
+      .select('text')
+      .attr('font-size', (d) => Math.min(radiusScale(d.totalVolumeUsd) * 0.5, 14))
 
     // Apply event handlers to ALL nodes (both new and existing) so they use current data
     nodeGroups
