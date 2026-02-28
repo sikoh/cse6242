@@ -154,7 +154,7 @@ export function NetworkGraph({
 
     // Scales
     const maxVolume = Math.max(...liveNodes.map((n) => n.totalVolumeUsd), 1)
-    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([12, 60])
+    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([12, 45])
     const widthScale = d3
       .scaleLog()
       .domain([1, Math.max(...d3Links.map((l) => l.frequency + 1), 2)])
