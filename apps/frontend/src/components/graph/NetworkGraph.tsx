@@ -36,16 +36,15 @@ function edgeColor(
   state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
 ): string {
   if (!state) return '#6b7280'
-  // return state.category === 'near-miss' ? '#fbbf24' : '#4ade80'
-  // use a slightly darker amber for near-miss edges so they appear less bright
-  return state.category === 'near-miss' ? '#d7c78e' : '#12cf57'
+  // Brighter green for network, amber matches feed
+  return state.category === 'near-miss' ? '#f5c854' : '#1aff66'
 }
 
 function edgeOpacity(
   state: { status: 'active' | 'stale'; category: OpportunityCategory } | undefined
 ): number {
   if (!state) return 0.5
-  if (state.category === 'near-miss') return state.status === 'active' ? 0.8 : 0.3
+  if (state.category === 'near-miss') return state.status === 'active' ? 0.25 : 0.15
   return state.status === 'active' ? 1 : 0.4
 }
 
@@ -155,13 +154,46 @@ export function NetworkGraph({
 
     // Scales
     const maxVolume = Math.max(...liveNodes.map((n) => n.totalVolumeUsd), 1)
-    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([8, 40])
-    const maxFrequency = Math.max(...d3Links.map((l) => l.frequency), 1)
-    const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([0, maxFrequency])
+    const radiusScale = d3.scaleSqrt().domain([0, maxVolume]).range([12, 60])
     const widthScale = d3
       .scaleLog()
       .domain([1, Math.max(...d3Links.map((l) => l.frequency + 1), 2)])
       .range([1.5, 7])
+
+    // Determine node colors based on connected edge categories
+    const nodeColorMap = new Map<string, string>()
+    if (highlightedEdges && highlightedEdges.size > 0) {
+      // First pass: identify which nodes have profitable edges
+      const hasProfit = new Set<string>()
+      const hasNearMiss = new Set<string>()
+      for (const [pair, state] of highlightedEdges) {
+        const link = d3Links.find((l) => l.pair === pair)
+        if (link) {
+          if (state.category === 'profitable') {
+            hasProfit.add(typeof link.source === 'string' ? link.source : link.source.id)
+            hasProfit.add(typeof link.target === 'string' ? link.target : link.target.id)
+          } else {
+            hasNearMiss.add(typeof link.source === 'string' ? link.source : link.source.id)
+            hasNearMiss.add(typeof link.target === 'string' ? link.target : link.target.id)
+          }
+        }
+      }
+      // Color nodes: green if profitable, amber if only near-miss, gray if neither
+      for (const node of d3Nodes) {
+        if (hasProfit.has(node.id)) {
+          nodeColorMap.set(node.id, '#1aff66')
+        } else if (hasNearMiss.has(node.id)) {
+          nodeColorMap.set(node.id, '#f5c854')
+        } else {
+          nodeColorMap.set(node.id, '#6b7280')
+        }
+      }
+    } else {
+      // No highlighted edges: all nodes gray
+      for (const node of d3Nodes) {
+        nodeColorMap.set(node.id, '#6b7280')
+      }
+    }
 
     // Stop existing simulation
     if (simulationRef.current) {
@@ -182,7 +214,7 @@ export function NetworkGraph({
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force(
         'collision',
-        d3.forceCollide<D3Node>().radius((d) => radiusScale(d.totalVolumeUsd) + 5)
+        d3.forceCollide<D3Node>().radius((d) => radiusScale(d.totalVolumeUsd) + 8)
       )
       .alphaMin(0.001)
       .alphaDecay(0.0005)
@@ -261,7 +293,7 @@ export function NetworkGraph({
 
           g.append('circle')
             .attr('r', (d) => radiusScale(d.totalVolumeUsd))
-            .attr('fill', (d) => (d.id === selectedNode ? 'var(--chart-2)' : 'var(--primary)'))
+            .attr('fill', (d) => nodeColorMap.get(d.id) || '#6b7280')
             .attr('fill-opacity', 0.95)
             .attr('stroke', 'var(--foreground)')
             .attr('stroke-opacity', (d) => (d.id === selectedNode ? 0.95 : 0.65))
@@ -275,7 +307,7 @@ export function NetworkGraph({
             .attr('stroke', 'var(--background)')
             .attr('stroke-width', 3)
             .attr('paint-order', 'stroke')
-            .attr('font-size', (d) => Math.min(radiusScale(d.totalVolumeUsd) * 0.6, 12))
+            .attr('font-size', (d) => Math.min(radiusScale(d.totalVolumeUsd) * 0.5, 14))
             .attr('font-weight', 'bold')
             .attr('pointer-events', 'none')
 

@@ -119,7 +119,7 @@ function GroupRow({ group }: { group: TriangleGroup }) {
   const [expanded, setExpanded] = useState(false)
 
   const isNearMiss = group.category === 'near-miss'
-  const profitColor = isNearMiss ? 'text-amber-500' : 'text-green-400/70'
+  const profitColor = isNearMiss ? '#f5c854' : '#12cf57'
   const borderColor = isNearMiss ? 'border-l-amber-500/50' : 'border-l-green-400/30'
   const profitPrefix = isNearMiss ? '' : '+'
 
@@ -163,7 +163,10 @@ function GroupRow({ group }: { group: TriangleGroup }) {
             )}
           </div>
         </div>
-        <div className={`text-right font-mono text-base font-semibold ${profitColor}`}>
+        <div
+          className={`text-right font-mono text-base font-semibold`}
+          style={{ color: profitColor }}
+        >
           {profitPrefix}
           {formatPercent(group.avgProfit)}
         </div>
@@ -182,7 +185,7 @@ function GroupRow({ group }: { group: TriangleGroup }) {
 
 function OpportunityItem({ opportunity }: { opportunity: DedupedOpportunity }) {
   const isNearMiss = opportunity.category === 'near-miss'
-  const profitColor = isNearMiss ? 'text-amber-500' : 'text-green-400/70'
+  const profitColor = isNearMiss ? '#f5c854' : '#12cf57'
   const profitPrefix = isNearMiss ? '' : '+'
 
   return (
@@ -198,7 +201,7 @@ function OpportunityItem({ opportunity }: { opportunity: DedupedOpportunity }) {
           </>
         )}
       </div>
-      <div className={`font-mono text-sm font-semibold ${profitColor}`}>
+      <div className={`font-mono text-sm font-semibold`} style={{ color: profitColor }}>
         {profitPrefix}
         {formatPercent(opportunity.profitPct)}
       </div>
