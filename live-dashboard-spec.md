@@ -80,28 +80,44 @@ Reverse direction: same formula applied to pairs in reverse order [P3, P2, P1]
 
 **Stats reporting**: Every 1 second, the worker posts a `STATS` message containing the current price map size and checks-per-second count.
 
-### 5. Opportunity Buffer
+### Opportunity Categorization & Deduplication
 
-Detected opportunities are stored in a React state array capped at **1,000 entries** (`MAX_OPPORTUNITIES`). New opportunities are prepended; when the buffer exceeds 1,000, the oldest entries are dropped. A separate cumulative `totalCount` counter tracks all-time detections for the session.
+Opportunities are categorized as **profitable** (profit > 0%) or **near-miss** (profit between `nearMissFloor` and 0%, default -0.5% to 0%). Multiple raw opportunities detected for the same triangle are grouped and deduplicated by:
+
+- **Triangle key** (canonical sorted currency triple)
+- **Direction** (forward or reverse)
+- **Price source** (pair symbol tuple)
+
+Each deduplicated entry aggregates:
+- Total count of raw opportunities merged
+- Aggregated volume across those opportunities
+- Volume-weighted average profit
+
+The deduplicated list is capped at **5,000 entries**. New opportunities are prepended; when the buffer exceeds capacity, the oldest entries are dropped. A separate cumulative `totalCount` counter tracks all-time detections for the session.
 
 ## User Interface
 
 ### Layout
 
 ```
-+-------------------------------------------------------+
-| LiveControls                                          |
-| [Status] [Pause/Resume] [Clear] | Fee | MinProfit | $ |
-+-------------------------------------------------------+
-| Stats: Pairs | Triangles | Msg/sec | PriceMap | Opps  |
-+-------------------------------------+-----------------+
-|                                     |                 |
-|  Network Graph (D3 force-directed)  | Opportunity     |
-|  2/3 width, 500px height            | Feed            |
-|                                     | 1/3 width       |
-|                                     | Scrollable list |
-+-------------------------------------+-----------------+
+----------------------------------------------------------------+
+| LiveControls (full width)                                        |
+| [Status] [Pause/Resume] [Clear] | Fee | MinProfit | Notional $     |
+----------------------------------------------------------------+
+| Stats: Base Coins | Pairs | Possible Triangles | Msg/sec | PriceMap | Opps |
+-----------------------------------------------+------------------------+
+|                                               |                        |
+|  Live Network (D3 force-directed)             | Opportunity Feed       |
+|  (2/3 width) h-[350px] / md:h-[450px] / lg:h-[500px] | (1/3 width) Scrollable |
+|  Header: "Live Network"   [Active only toggle]  | list grouped by       |
+|  Drag / Pan / Zoom / Hover                     | triangle + direction  |
+|                                               | shows expanded items  |
+-----------------------------------------------+------------------------+
 ```
+
+Legend: near-miss = muted amber (subdued color/opacity); profitable = green. Use `Show Near-Misses` toggle to include/exclude near-miss entries in the feed and graph.
+ 
+Near-miss display: Near-miss opportunities (profit between `nearMissFloor` and 0%) are represented in the UI as muted amber elements. The Network Graph renders near-miss edges in a subdued amber color with reduced opacity, and the Opportunity Feed shows near-miss groups with an amber left border and amber text. Use the `Show Near-Misses` toggle in the Controls Bar to include or exclude near-miss entries from the feed and graph.
 
 ### Controls Bar
 
@@ -113,9 +129,10 @@ Detected opportunities are stored in a React state array capped at **1,000 entri
 | Clear | Button | - | - | Resets opportunity list and cumulative total count to zero; does **not** reset price map or config |
 | Fee % | Slider | 0.10% | 0.00% - 1.00% (step 0.10%) | Applied per trade leg in the profit calculation |
 | Min Profit | Slider | 0.05% | 0.00% - 2.00% (step 0.01%) | Opportunities below this threshold are discarded by the worker |
-| Notional $ | Number input | $100 | $1 - $100,000 | Starting trade amount used in profit calculation |
-
-Config changes take effect immediately - the new values are posted to the worker, which uses them for all subsequent price checks.
+| Notional $ | Number input | $1,000 | $1 - $100,000 | Starting trade amount used in profit calculation |
+| Show Near-Misses | Toggle | OFF | - | When ON, displays opportunities with profit between `nearMissFloor` and 0%; when OFF, only profitable opportunities (>0%) are shown |
+| Stale Minutes | Slider | 5 min | 1 - 60 min | Determines how long an opportunity remains "active" (bright) in the graph before fading to "stale" (dimmed) |
+| Show Active Only | Toggle | ON | - | When ON, hides graph nodes/links not involved in recent opportunities; when OFF, shows full network |
 
 ### Stats Cards
 
@@ -133,26 +150,50 @@ Five summary cards displayed in a row:
 
 D3.js force-directed graph (`components/graph/NetworkGraph.tsx`):
 
-- **Nodes**: Currencies. Size scales with total volume USD across buffered opportunities. Clicking a node opens a detail panel via app context.
-- **Links**: Trading pairs. Width scales logarithmically with opportunity frequency (1.5-7px range). Color follows a viridis-style colormap based on relative frequency.
-- **Flashing edges**: Pairs involved in opportunities detected within the **last 2 seconds** are highlighted in yellow (`#facc15`) at full opacity. This provides real-time visual feedback when arbitrage is found.
-- **Interactions**: Drag nodes, zoom/pan, hover for tooltips.
+- **Nodes**: Currencies. Size scales with total opportunity count and volume USD. Clicking a node opens a detail panel via app context.
+- **Links**: Trading pairs. Width scales with opportunity frequency. Color and opacity vary by opportunity status:
+  - **Profitable edges**: Green (`#12cf57`), high opacity when active (1.0), low when stale (0.4)
+  - **Near-miss edges**: Muted amber (`#d7c78e`), medium-high opacity when active (0.8), very low when stale (0.3)
+  - **No events**: Gray (`#6b7280`), 50% opacity
+- **Active vs. Stale**: Determined by timestamp relative to `staleMinutes` config. Active edges render at full brightness; stale edges fade.
+- **Priority rendering**: Profitable-active edges render on top, followed by near-miss-active, then stale edges below. This ensures high-value opportunities are always visible.
+- **Interactions**: Drag nodes, zoom/pan, hover for tooltips. Can toggle "Show Active Only" to filter out the static graph and view only recent opportunity networks.
 
 ### Opportunity Feed
 
-Scrollable card showing the most recent buffered opportunities (up to 1,000):
+Scrollable card showing deduplicated opportunities (up to 5,000 entries), grouped and sorted by status:
 
-Each row displays:
+Each group displays:
 
-- **Triangle path**: `CurrA -> CurrB -> CurrC` shown as badges
+- **Triangle path**: `CurrA → CurrB → CurrC` shown as badges
 - **Direction**: "forward" or "reverse"
-- **Time ago**: Relative timestamp (e.g., "2s ago")
-- **Profit %**: Color-coded by magnitude:
-  - `> 0.5%`: Emerald
-  - `0.2% - 0.5%`: Green
-  - `< 0.2%`: Lime
+- **Count badge**: Optional; shown if multiple raw opportunities are merged into this group
+- **Time ago**: Relative timestamp of the most recent raw opportunity in the group
+- **Total volume**: Aggregated USD volume across all merged opportunities
+- **Avg profit %**: Volume-weighted average profit of the group
+- **Expandable rows**: Click to expand and view individual raw opportunities bundled into the group
+
+**Sorting**: Profitable groups appear first, then near-miss groups; within each category, most recent first.
+
+**Color scheme**:
+- **Profitable** (profit > 0%): Green text (`text-green-400/70`), green left border
+- **Near-miss** (profit ≤ 0%, ≥ `nearMissFloor`): Muted amber text (`text-amber-500`), amber left border
+- The "Show Near-Misses" toggle filters whether near-miss groups are displayed at all
 
 Empty state shows: "No opportunities detected yet - Markets are efficient most of the time"
+
+### Additional UI Features
+
+**Coin Selector**: Click the "Base Coins" stat card to open a modal for selecting which quote currencies (USDT, BTC, ETH, BNB, BUSD) to monitor. Changing selections clears the opportunity buffer and rebuilds the pair/triangle set.
+
+**Drawer Panels** (opened by clicking stat cards):
+
+- **Pairs Drawer**: Lists all filtered trading pairs included in the current analysis
+- **Triangles Drawer**: Shows enumerated triangular cycles with their constituent pairs  
+- **Streams Drawer**: Displays real-time WebSocket message log for the current session (messages/sec, recent stream errors)
+- **Price Map Drawer**: Shows the current price entries (bid/ask) for all pairs that have received at least one update
+
+These drawers provide transparency into the detection pipeline and help debug why certain opportunities may or may not appear.
 
 ## Constraints Summary
 
@@ -161,9 +202,8 @@ Empty state shows: "No opportunities detected yet - Markets are efficient most o
 | Constraint | Value | Location |
 |------------|-------|----------|
 | Max WebSocket streams | 200 | `useBinanceWebSocket.ts:5` |
-| Max buffered opportunities | 1,000 | `useArbitrageDetection.ts:28` |
+| Max buffered opportunities | 5,000 | `useArbitrageDetection.ts` |
 | Max reasonable profit | 10% | `arbitrage.worker.ts:86` |
-| Flashing edge window | 2 seconds | `LiveDashboard.tsx:59` |
 | Max reconnect attempts | 5 | `useBinanceWebSocket.ts:31` |
 | Max reconnect backoff | 30 seconds | `useBinanceWebSocket.ts:76` |
 | Exchange info cache TTL | 1 hour | `useBinanceExchangeInfo.ts:11` |
@@ -176,7 +216,9 @@ Empty state shows: "No opportunities detected yet - Markets are efficient most o
 |-----------|---------|-----|-----|------|
 | Fee per leg | 0.10% | 0.00% | 1.00% | 0.10% |
 | Min profit threshold | 0.05% | 0.00% | 2.00% | 0.01% |
-| Notional amount | $100 | $1 | $100,000 | $1 |
+| Notional amount | $1,000 | $1 | $100,000 | $1 |
+| Near-miss floor | -0.50% | - | 0.00% | - |
+| Stale minutes | 5 min | 1 min | 60 min | 1 min |
 
 ## Key Files
 
@@ -202,3 +244,5 @@ Empty state shows: "No opportunities detected yet - Markets are efficient most o
 4. **No order book depth check**: Only best bid/ask prices are used. Actual execution at the notional amount could face slippage.
 5. **200-pair cap**: Liquid pairs beyond the first 200 are excluded from monitoring.
 6. **Session-only storage**: All opportunity history is lost on page refresh or tab close.
+7. **Deduplication across sessions**: Deduplication is based on triangle key and direction only; identical triangles from different market cycles are merged into one group.
+8. **Graph filtering on primary quote currencies**: Only triangles involving the selected quote currencies are monitored. Opportunities across other quote currencies cannot be detected.
