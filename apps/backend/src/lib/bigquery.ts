@@ -7,6 +7,11 @@ const location = process.env.BIGQUERY_LOCATION
 
 const viewId = process.env.BIGQUERY_VIEW_ID ?? [projectId, dataset, table].filter(Boolean).join('.')
 
+const credentials = {
+  client_email: process.env.GOOGLE_APPLICATION_CREDENTIALS_EMAIL,
+  private_key: process.env.GOOGLE_APPLICATION_CREDENTIALS_KEY, //?.replace(/\\n/g, '\n'),
+}
+
 if (!viewId) {
   throw new Error(
     'BigQuery configuration is required. Set BIGQUERY_VIEW_ID or BIGQUERY_PROJECT_ID and BIGQUERY_DATASET.'
@@ -28,6 +33,7 @@ export const bigquery =
   globalForBigQuery.bigquery ??
   new BigQuery({
     projectId,
+    credentials,
   })
 
 if (process.env.NODE_ENV !== 'production') {
