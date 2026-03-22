@@ -1,5 +1,4 @@
-import { Prisma } from '@prisma/client'
-import { prisma } from '../lib/prisma.js'
+import { historicalView, runQuery } from '../lib/bigquery.js'
 import type {
   GraphData,
   GraphLink,
@@ -18,99 +17,153 @@ import type {
   TrianglesQuery,
 } from '../types/index.js'
 
-// Helper to format date for PostgreSQL
-const toDate = (d: string) => new Date(d)
+const toBqDatePart = (bin: 'day' | 'month' | 'year') =>
+  bin === 'day' ? 'DAY' : bin === 'month' ? 'MONTH' : 'YEAR'
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number') {
+    return value
+  }
+  if (typeof value === 'string') {
+    return Number(value)
+  }
+  if (typeof value === 'bigint') {
+    return Number(value)
+  }
+  if (value && typeof value === 'object' && 'value' in value) {
+    return Number(value.value)
+  }
+  return 0
+}
+
+const toNullableNumber = (value: unknown): number | null => {
+  if (value == null) {
+    return null
+  }
+  return toNumber(value)
+}
+
+const toDateString = (value: unknown): string => {
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0]
+  }
+  if (typeof value === 'string') {
+    return value.includes('T') ? value.split('T')[0] : value
+  }
+  if (value && typeof value === 'object' && 'value' in value && typeof value.value === 'string') {
+    return value.value
+  }
+  return new Date(String(value)).toISOString().split('T')[0]
+}
+
+const toISOString = (value: unknown): string => {
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+  if (typeof value === 'string') {
+    return new Date(value).toISOString()
+  }
+  if (value && typeof value === 'object' && 'value' in value && typeof value.value === 'string') {
+    return new Date(value.value).toISOString()
+  }
+  return new Date(String(value)).toISOString()
+}
 
 export async function getSummary(query: SummaryQuery): Promise<SummaryData> {
   const { startDate, endDate, bin } = query
-  const start = toDate(startDate)
-  const end = toDate(endDate)
 
-  // Main aggregates
-  const aggregates = await prisma.$queryRaw<
-    Array<{
-      total: bigint
-      avg_profit: number | null
-      max_profit: number | null
-      total_volume: number | null
-      unique_triangles: bigint
-    }>
-  >`
+  const aggregates = await runQuery<{
+    total: unknown
+    avg_profit: unknown
+    max_profit: unknown
+    total_volume: unknown
+    unique_triangles: unknown
+  }>(
+    `
     SELECT
-      COUNT(*) as total,
-      AVG(profit_net_pct) as avg_profit,
-      MAX(profit_net_pct) as max_profit,
-      SUM(COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0)) as total_volume,
-      COUNT(DISTINCT triangle_key) as unique_triangles
-    FROM vw_triangle_opportunities_enriched
-    WHERE trade_date BETWEEN ${start} AND ${end}
-  `
+      COUNT(*) AS total,
+      AVG(profit_net_pct) AS avg_profit,
+      MAX(profit_net_pct) AS max_profit,
+      SUM(COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0)) AS total_volume,
+      COUNT(DISTINCT triangle_key) AS unique_triangles
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+  `,
+    { endDate, startDate }
+  )
 
-  // Unique currencies (need separate query due to UNION)
-  const currencyCount = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
-    SELECT COUNT(DISTINCT currency) as cnt FROM (
-      SELECT curr_a as currency FROM vw_triangle_opportunities_enriched WHERE trade_date BETWEEN ${start} AND ${end}
-      UNION
-      SELECT curr_b FROM vw_triangle_opportunities_enriched WHERE trade_date BETWEEN ${start} AND ${end}
-      UNION
-      SELECT curr_c FROM vw_triangle_opportunities_enriched WHERE trade_date BETWEEN ${start} AND ${end}
+  const currencyCount = await runQuery<{ cnt: unknown }>(
+    `
+    SELECT COUNT(DISTINCT currency) AS cnt
+    FROM (
+      SELECT curr_a AS currency FROM ${historicalView} WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      UNION DISTINCT
+      SELECT curr_b FROM ${historicalView} WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      UNION DISTINCT
+      SELECT curr_c FROM ${historicalView} WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
     ) t
-  `
+  `,
+    { endDate, startDate }
+  )
 
-  // Top triangles
-  const topTriangles = await prisma.$queryRaw<
-    Array<{ triangle_key: string; cnt: bigint; avg_profit: number }>
-  >`
+  const topTriangles = await runQuery<{ triangle_key: string; cnt: unknown; avg_profit: unknown }>(
+    `
     SELECT
       triangle_key,
-      COUNT(*) as cnt,
-      AVG(profit_net_pct) as avg_profit
-    FROM vw_triangle_opportunities_enriched
-    WHERE trade_date BETWEEN ${start} AND ${end}
+      COUNT(*) AS cnt,
+      AVG(profit_net_pct) AS avg_profit
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
     GROUP BY triangle_key
     ORDER BY cnt DESC
     LIMIT 10
-  `
+  `,
+    { endDate, startDate }
+  )
 
-  // Time series (if bin specified)
   let timeSeries: TimeSeriesPoint[] | undefined
   if (bin) {
-    const truncFn = bin === 'day' ? 'day' : bin === 'month' ? 'month' : 'year'
-    const truncLiteral = Prisma.raw(`'${truncFn}'`)
-    const tsData = await prisma.$queryRaw<
-      Array<{ date: Date; cnt: bigint; avg_profit: number; max_profit: number }>
-    >`
-        SELECT
-          DATE_TRUNC(${truncLiteral}, trade_date) as date,
-        COUNT(*) as cnt,
-        AVG(profit_net_pct) as avg_profit,
-        MAX(profit_net_pct) as max_profit
-      FROM vw_triangle_opportunities_enriched
-      WHERE trade_date BETWEEN ${start} AND ${end}
-      GROUP BY DATE_TRUNC(${truncLiteral}, trade_date)
+    const truncFn = toBqDatePart(bin)
+    const tsData = await runQuery<{
+      date: unknown
+      cnt: unknown
+      avg_profit: unknown
+      max_profit: unknown
+    }>(
+      `
+      SELECT
+        DATE_TRUNC(trade_date, ${truncFn}) AS date,
+        COUNT(*) AS cnt,
+        AVG(profit_net_pct) AS avg_profit,
+        MAX(profit_net_pct) AS max_profit
+      FROM ${historicalView}
+      WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      GROUP BY date
       ORDER BY date
-    `
+    `,
+      { endDate, startDate }
+    )
     timeSeries = tsData.map((row) => ({
-      date: row.date.toISOString().split('T')[0],
-      count: Number(row.cnt),
-      avgProfit: row.avg_profit,
-      maxProfit: row.max_profit,
+      date: toDateString(row.date),
+      count: toNumber(row.cnt),
+      avgProfit: toNumber(row.avg_profit),
+      maxProfit: toNumber(row.max_profit),
     }))
   }
 
   const agg = aggregates[0]
   return {
-    totalOpportunities: Number(agg?.total ?? 0),
-    avgProfitPct: agg?.avg_profit ?? 0,
-    maxProfitPct: agg?.max_profit ?? 0,
-    totalVolumeUsd: agg?.total_volume ?? 0,
-    uniqueTriangles: Number(agg?.unique_triangles ?? 0),
-    uniqueCurrencies: Number(currencyCount[0]?.cnt ?? 0),
+    totalOpportunities: toNumber(agg?.total),
+    avgProfitPct: toNumber(agg?.avg_profit),
+    maxProfitPct: toNumber(agg?.max_profit),
+    totalVolumeUsd: toNumber(agg?.total_volume),
+    uniqueTriangles: toNumber(agg?.unique_triangles),
+    uniqueCurrencies: toNumber(currencyCount[0]?.cnt),
     topTriangles: topTriangles.map(
       (t): TopTriangle => ({
         triangleKey: t.triangle_key,
-        count: Number(t.cnt),
-        avgProfit: t.avg_profit,
+        count: toNumber(t.cnt),
+        avgProfit: toNumber(t.avg_profit),
       })
     ),
     timeSeries,
@@ -119,21 +172,23 @@ export async function getSummary(query: SummaryQuery): Promise<SummaryData> {
 
 export async function getGraph(query: GraphQuery): Promise<GraphData> {
   const { startDate, endDate, minFrequency, minProfitPct } = query
-  const start = toDate(startDate)
-  const end = toDate(endDate)
 
-  // Nodes: aggregate by currency
-  const nodes = await prisma.$queryRaw<
-    Array<{ currency: string; cnt: bigint; total_volume: number; avg_profit: number }>
-  >`
+  const nodes = await runQuery<{
+    currency: string
+    cnt: unknown
+    total_volume: unknown
+    avg_profit: unknown
+  }>(
+    `
     WITH opps AS (
-      SELECT * FROM vw_triangle_opportunities_enriched
-      WHERE trade_date BETWEEN ${start} AND ${end}
-        AND profit_net_pct >= ${minProfitPct}
+      SELECT *
+      FROM ${historicalView}
+      WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+        AND profit_net_pct >= @minProfitPct
     ),
     currency_stats AS (
-      SELECT curr_a as currency, profit_net_pct as profit,
-             COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0) as vol
+      SELECT curr_a AS currency, profit_net_pct AS profit,
+             COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0) AS vol
       FROM opps
       UNION ALL
       SELECT curr_b, profit_net_pct,
@@ -146,34 +201,35 @@ export async function getGraph(query: GraphQuery): Promise<GraphData> {
     )
     SELECT
       currency,
-      COUNT(*) as cnt,
-      SUM(vol) as total_volume,
-      AVG(profit) as avg_profit
+      COUNT(*) AS cnt,
+      SUM(vol) AS total_volume,
+      AVG(profit) AS avg_profit
     FROM currency_stats
     GROUP BY currency
-    HAVING COUNT(*) >= ${minFrequency}
+    HAVING COUNT(*) >= @minFrequency
     ORDER BY cnt DESC
-  `
+  `,
+    { endDate, minFrequency, minProfitPct, startDate }
+  )
 
-  // Links: aggregate by pair
-  const links = await prisma.$queryRaw<
-    Array<{
-      pair: string
-      src: string
-      tgt: string
-      cnt: bigint
-      avg_profit: number
-      total_volume: number
-    }>
-  >`
+  const links = await runQuery<{
+    pair: string
+    src: string
+    tgt: string
+    cnt: unknown
+    avg_profit: unknown
+    total_volume: unknown
+  }>(
+    `
     WITH opps AS (
-      SELECT * FROM vw_triangle_opportunities_enriched
-      WHERE trade_date BETWEEN ${start} AND ${end}
-        AND profit_net_pct >= ${minProfitPct}
+      SELECT *
+      FROM ${historicalView}
+      WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+        AND profit_net_pct >= @minProfitPct
     ),
     pair_stats AS (
-      SELECT pair_ab as pair, curr_a as src, curr_b as tgt,
-             profit_net_pct, COALESCE(volume_usd_ab, 0) as vol FROM opps
+      SELECT pair_ab AS pair, curr_a AS src, curr_b AS tgt,
+             profit_net_pct, COALESCE(volume_usd_ab, 0) AS vol FROM opps
       UNION ALL
       SELECT pair_bc, curr_b, curr_c, profit_net_pct, COALESCE(volume_usd_bc, 0) FROM opps
       UNION ALL
@@ -181,20 +237,20 @@ export async function getGraph(query: GraphQuery): Promise<GraphData> {
     )
     SELECT
       pair, src, tgt,
-      COUNT(*) as cnt,
-      AVG(profit_net_pct) as avg_profit,
-      SUM(vol) as total_volume
+      COUNT(*) AS cnt,
+      AVG(profit_net_pct) AS avg_profit,
+      SUM(vol) AS total_volume
     FROM pair_stats
     GROUP BY pair, src, tgt
-    HAVING COUNT(*) >= ${minFrequency}
+    HAVING COUNT(*) >= @minFrequency
     ORDER BY cnt DESC
-  `
+  `,
+    { endDate, minFrequency, minProfitPct, startDate }
+  )
 
-  // Filter links to only include nodes that exist
   const nodeIds = new Set(nodes.map((n) => n.currency))
   const filteredLinks = links.filter((l) => nodeIds.has(l.src) && nodeIds.has(l.tgt))
 
-  // Filter nodes to only include those with at least one link
   const connectedNodeIds = new Set<string>()
   for (const link of filteredLinks) {
     connectedNodeIds.add(link.src)
@@ -206,9 +262,9 @@ export async function getGraph(query: GraphQuery): Promise<GraphData> {
     nodes: connectedNodes.map(
       (n): GraphNode => ({
         id: n.currency,
-        opportunityCount: Number(n.cnt),
-        totalVolumeUsd: n.total_volume,
-        avgProfit: n.avg_profit,
+        opportunityCount: toNumber(n.cnt),
+        totalVolumeUsd: toNumber(n.total_volume),
+        avgProfit: toNumber(n.avg_profit),
       })
     ),
     links: filteredLinks.map(
@@ -216,9 +272,9 @@ export async function getGraph(query: GraphQuery): Promise<GraphData> {
         source: l.src,
         target: l.tgt,
         pair: l.pair,
-        frequency: Number(l.cnt),
-        avgProfit: l.avg_profit,
-        totalVolumeUsd: l.total_volume,
+        frequency: toNumber(l.cnt),
+        avgProfit: toNumber(l.avg_profit),
+        totalVolumeUsd: toNumber(l.total_volume),
       })
     ),
   }
@@ -228,69 +284,65 @@ export async function getTriangles(
   query: TrianglesQuery
 ): Promise<{ data: TriangleDetail[]; total: number }> {
   const { startDate, endDate, currency, limit, offset, sortBy } = query
-  const start = toDate(startDate)
-  const end = toDate(endDate)
 
-  // Get total count
-  const countResult = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
-    SELECT COUNT(DISTINCT triangle_key) as cnt
-    FROM vw_triangle_opportunities_enriched
-    WHERE trade_date BETWEEN ${start} AND ${end}
-      AND (curr_a = ${currency} OR curr_b = ${currency} OR curr_c = ${currency})
-  `
-  const total = Number(countResult[0]?.cnt ?? 0)
+  const countResult = await runQuery<{ cnt: unknown }>(
+    `
+    SELECT COUNT(DISTINCT triangle_key) AS cnt
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      AND (curr_a = @currency OR curr_b = @currency OR curr_c = @currency)
+  `,
+    { currency, endDate, startDate }
+  )
+  const total = toNumber(countResult[0]?.cnt)
 
-  // Determine sort column
   const orderBy =
-    sortBy === 'profit'
-      ? Prisma.sql`avg_profit DESC`
-      : sortBy === 'volume'
-        ? Prisma.sql`total_volume DESC`
-        : Prisma.sql`cnt DESC`
+    sortBy === 'profit' ? 'avg_profit DESC' : sortBy === 'volume' ? 'total_volume DESC' : 'cnt DESC'
 
-  const data = await prisma.$queryRaw<
-    Array<{
-      triangle_id: number
-      triangle_key: string
-      curr_a: string
-      curr_b: string
-      curr_c: string
-      cnt: bigint
-      avg_profit: number
-      max_profit: number
-      total_volume: number
-      last_seen: Date
-    }>
-  >`
+  const data = await runQuery<{
+    triangle_id: unknown
+    triangle_key: string
+    curr_a: string
+    curr_b: string
+    curr_c: string
+    cnt: unknown
+    avg_profit: unknown
+    max_profit: unknown
+    total_volume: unknown
+    last_seen: unknown
+  }>(
+    `
     SELECT
-      MIN(id) as triangle_id,
+      MIN(id) AS triangle_id,
       triangle_key, curr_a, curr_b, curr_c,
-      COUNT(*) as cnt,
-      AVG(profit_net_pct) as avg_profit,
-      MAX(profit_net_pct) as max_profit,
-      SUM(COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0)) as total_volume,
-      MAX(timestamp) as last_seen
-    FROM vw_triangle_opportunities_enriched
-    WHERE trade_date BETWEEN ${start} AND ${end}
-      AND (curr_a = ${currency} OR curr_b = ${currency} OR curr_c = ${currency})
+      COUNT(*) AS cnt,
+      AVG(profit_net_pct) AS avg_profit,
+      MAX(profit_net_pct) AS max_profit,
+      SUM(COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0)) AS total_volume,
+      MAX(timestamp) AS last_seen
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      AND (curr_a = @currency OR curr_b = @currency OR curr_c = @currency)
     GROUP BY triangle_key, curr_a, curr_b, curr_c
     ORDER BY ${orderBy}
-    LIMIT ${limit} OFFSET ${offset}
-  `
+    LIMIT @limit OFFSET @offset
+  `,
+    { currency, endDate, limit, offset, startDate }
+  )
 
   return {
     data: data.map(
       (row): TriangleDetail => ({
-        triangleId: row.triangle_id,
+        triangleId: toNumber(row.triangle_id),
         triangleKey: row.triangle_key,
         currA: row.curr_a,
         currB: row.curr_b,
         currC: row.curr_c,
-        count: Number(row.cnt),
-        avgProfit: row.avg_profit,
-        maxProfit: row.max_profit,
-        totalVolumeUsd: row.total_volume,
-        lastSeen: row.last_seen.toISOString(),
+        count: toNumber(row.cnt),
+        avgProfit: toNumber(row.avg_profit),
+        maxProfit: toNumber(row.max_profit),
+        totalVolumeUsd: toNumber(row.total_volume),
+        lastSeen: toISOString(row.last_seen),
       })
     ),
     total,
@@ -301,44 +353,45 @@ export async function getOpportunities(
   query: OpportunitiesQuery
 ): Promise<{ data: OpportunityRow[]; total: number }> {
   const { startDate, endDate, triangleKey, minProfitPct, limit, offset } = query
-  const start = toDate(startDate)
-  const end = toDate(endDate)
 
-  // Build WHERE conditions
-  const conditions = [Prisma.sql`trade_date BETWEEN ${start} AND ${end}`]
-  if (triangleKey) {
-    conditions.push(Prisma.sql`triangle_key = ${triangleKey}`)
+  const params = {
+    endDate,
+    limit,
+    minProfitPct: minProfitPct ?? null,
+    offset,
+    startDate,
+    triangleKey: triangleKey ?? null,
   }
-  if (minProfitPct !== undefined) {
-    conditions.push(Prisma.sql`profit_net_pct >= ${minProfitPct}`)
-  }
-  const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
 
-  // Get total count
-  const countResult = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
-    SELECT COUNT(*) as cnt FROM vw_triangle_opportunities_enriched ${whereClause}
-  `
-  const total = Number(countResult[0]?.cnt ?? 0)
+  const countResult = await runQuery<{ cnt: unknown }>(
+    `
+    SELECT COUNT(*) AS cnt
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      AND (@triangleKey IS NULL OR triangle_key = @triangleKey)
+      AND (@minProfitPct IS NULL OR profit_net_pct >= @minProfitPct)
+  `,
+    params
+  )
+  const total = toNumber(countResult[0]?.cnt)
 
-  // Get data
-  const data = await prisma.$queryRaw<
-    Array<{
-      id: number
-      timestamp: Date
-      triangle_key: string
-      curr_a: string
-      curr_b: string
-      curr_c: string
-      profit_net_pct: number
-      pair_ab: string
-      pair_bc: string
-      pair_ca: string
-      volume_usd_ab: number | null
-      volume_usd_bc: number | null
-      volume_usd_ca: number | null
-      min_trades: number | null
-    }>
-  >`
+  const data = await runQuery<{
+    id: unknown
+    timestamp: unknown
+    triangle_key: string
+    curr_a: string
+    curr_b: string
+    curr_c: string
+    profit_net_pct: unknown
+    pair_ab: string
+    pair_bc: string
+    pair_ca: string
+    volume_usd_ab: unknown
+    volume_usd_bc: unknown
+    volume_usd_ca: unknown
+    min_trades: unknown
+  }>(
+    `
     SELECT
       id, timestamp, triangle_key,
       curr_a, curr_b, curr_c,
@@ -346,29 +399,33 @@ export async function getOpportunities(
       pair_ab, pair_bc, pair_ca,
       volume_usd_ab, volume_usd_bc, volume_usd_ca,
       min_trades
-    FROM vw_triangle_opportunities_enriched
-    ${whereClause}
+    FROM ${historicalView}
+    WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+      AND (@triangleKey IS NULL OR triangle_key = @triangleKey)
+      AND (@minProfitPct IS NULL OR profit_net_pct >= @minProfitPct)
     ORDER BY timestamp DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `
+    LIMIT @limit OFFSET @offset
+  `,
+    params
+  )
 
   return {
     data: data.map(
       (row): OpportunityRow => ({
-        id: row.id,
-        timestamp: row.timestamp.toISOString(),
+        id: toNumber(row.id),
+        timestamp: toISOString(row.timestamp),
         triangleKey: row.triangle_key,
         currA: row.curr_a,
         currB: row.curr_b,
         currC: row.curr_c,
-        profitNetPct: row.profit_net_pct,
+        profitNetPct: toNumber(row.profit_net_pct),
         pairAb: row.pair_ab,
         pairBc: row.pair_bc,
         pairCa: row.pair_ca,
-        volumeUsdAb: row.volume_usd_ab,
-        volumeUsdBc: row.volume_usd_bc,
-        volumeUsdCa: row.volume_usd_ca,
-        minTrades: row.min_trades,
+        volumeUsdAb: toNullableNumber(row.volume_usd_ab),
+        volumeUsdBc: toNullableNumber(row.volume_usd_bc),
+        volumeUsdCa: toNullableNumber(row.volume_usd_ca),
+        minTrades: toNullableNumber(row.min_trades),
       })
     ),
     total,
@@ -377,34 +434,30 @@ export async function getOpportunities(
 
 export async function getGraphTimeline(query: GraphTimelineQuery): Promise<GraphTimelineData> {
   const { startDate, endDate, bin, minFrequency, minProfitPct } = query
-  const start = toDate(startDate)
-  const end = toDate(endDate)
+  const truncFn = toBqDatePart(bin)
 
-  const truncFn = bin === 'day' ? 'day' : bin === 'month' ? 'month' : 'year'
-  const truncLiteral = Prisma.raw(`'${truncFn}'`)
+  const params = { endDate, minFrequency, minProfitPct, startDate }
 
-  // Get time-bucketed node data
-  const nodeData = await prisma.$queryRaw<
-    Array<{
-      bucket: Date
-      currency: string
-      cnt: bigint
-      total_volume: number
-      avg_profit: number
-    }>
-  >`
+  const nodeData = await runQuery<{
+    bucket: unknown
+    currency: string
+    cnt: unknown
+    total_volume: unknown
+    avg_profit: unknown
+  }>(
+    `
     WITH opps AS (
       SELECT
-        DATE_TRUNC(${truncLiteral}, trade_date) as bucket,
+        DATE_TRUNC(trade_date, ${truncFn}) AS bucket,
         curr_a, curr_b, curr_c,
         profit_net_pct,
-        COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0) as vol
-      FROM vw_triangle_opportunities_enriched
-      WHERE trade_date BETWEEN ${start} AND ${end}
-        AND profit_net_pct >= ${minProfitPct}
+        COALESCE(volume_usd_ab, 0) + COALESCE(volume_usd_bc, 0) + COALESCE(volume_usd_ca, 0) AS vol
+      FROM ${historicalView}
+      WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+        AND profit_net_pct >= @minProfitPct
     ),
     currency_stats AS (
-      SELECT bucket, curr_a as currency, profit_net_pct as profit, vol FROM opps
+      SELECT bucket, curr_a AS currency, profit_net_pct AS profit, vol FROM opps
       UNION ALL
       SELECT bucket, curr_b, profit_net_pct, vol FROM opps
       UNION ALL
@@ -413,42 +466,42 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
     SELECT
       bucket,
       currency,
-      COUNT(*) as cnt,
-      SUM(vol) as total_volume,
-      AVG(profit) as avg_profit
+      COUNT(*) AS cnt,
+      SUM(vol) AS total_volume,
+      AVG(profit) AS avg_profit
     FROM currency_stats
     GROUP BY bucket, currency
-    HAVING COUNT(*) >= ${minFrequency}
+    HAVING COUNT(*) >= @minFrequency
     ORDER BY bucket, currency
-  `
+  `,
+    params
+  )
 
-  // Get time-bucketed link data
-  const linkData = await prisma.$queryRaw<
-    Array<{
-      bucket: Date
-      pair: string
-      src: string
-      tgt: string
-      cnt: bigint
-      avg_profit: number
-      total_volume: number
-    }>
-  >`
+  const linkData = await runQuery<{
+    bucket: unknown
+    pair: string
+    src: string
+    tgt: string
+    cnt: unknown
+    avg_profit: unknown
+    total_volume: unknown
+  }>(
+    `
     WITH opps AS (
       SELECT
-        DATE_TRUNC(${truncLiteral}, trade_date) as bucket,
+        DATE_TRUNC(trade_date, ${truncFn}) AS bucket,
         pair_ab, pair_bc, pair_ca,
         curr_a, curr_b, curr_c,
         profit_net_pct,
-        COALESCE(volume_usd_ab, 0) as vol_ab,
-        COALESCE(volume_usd_bc, 0) as vol_bc,
-        COALESCE(volume_usd_ca, 0) as vol_ca
-      FROM vw_triangle_opportunities_enriched
-      WHERE trade_date BETWEEN ${start} AND ${end}
-        AND profit_net_pct >= ${minProfitPct}
+        COALESCE(volume_usd_ab, 0) AS vol_ab,
+        COALESCE(volume_usd_bc, 0) AS vol_bc,
+        COALESCE(volume_usd_ca, 0) AS vol_ca
+      FROM ${historicalView}
+      WHERE trade_date BETWEEN DATE(@startDate) AND DATE(@endDate)
+        AND profit_net_pct >= @minProfitPct
     ),
     pair_stats AS (
-      SELECT bucket, pair_ab as pair, curr_a as src, curr_b as tgt, profit_net_pct, vol_ab as vol FROM opps
+      SELECT bucket, pair_ab AS pair, curr_a AS src, curr_b AS tgt, profit_net_pct, vol_ab AS vol FROM opps
       UNION ALL
       SELECT bucket, pair_bc, curr_b, curr_c, profit_net_pct, vol_bc FROM opps
       UNION ALL
@@ -456,16 +509,17 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
     )
     SELECT
       bucket, pair, src, tgt,
-      COUNT(*) as cnt,
-      AVG(profit_net_pct) as avg_profit,
-      SUM(vol) as total_volume
+      COUNT(*) AS cnt,
+      AVG(profit_net_pct) AS avg_profit,
+      SUM(vol) AS total_volume
     FROM pair_stats
     GROUP BY bucket, pair, src, tgt
-    HAVING COUNT(*) >= ${minFrequency}
+    HAVING COUNT(*) >= @minFrequency
     ORDER BY bucket, pair
-  `
+  `,
+    params
+  )
 
-  // Group by bucket to create snapshots
   const bucketMap = new Map<
     string,
     { nodes: Map<string, GraphNode>; links: Map<string, GraphLink> }
@@ -473,9 +527,8 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
   const allNodesMap = new Map<string, GraphNode>()
   const allLinksMap = new Map<string, GraphLink>()
 
-  // Process nodes
   for (const row of nodeData) {
-    const dateStr = row.bucket.toISOString().split('T')[0]
+    const dateStr = toDateString(row.bucket)
     if (!bucketMap.has(dateStr)) {
       bucketMap.set(dateStr, { nodes: new Map(), links: new Map() })
     }
@@ -483,13 +536,12 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
 
     const node: GraphNode = {
       id: row.currency,
-      opportunityCount: Number(row.cnt),
-      totalVolumeUsd: row.total_volume,
-      avgProfit: row.avg_profit,
+      opportunityCount: toNumber(row.cnt),
+      totalVolumeUsd: toNumber(row.total_volume),
+      avgProfit: toNumber(row.avg_profit),
     }
     bucket.nodes.set(row.currency, node)
 
-    // Aggregate for allNodes
     const existing = allNodesMap.get(row.currency)
     if (existing) {
       existing.opportunityCount += node.opportunityCount
@@ -500,9 +552,8 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
     }
   }
 
-  // Process links
   for (const row of linkData) {
-    const dateStr = row.bucket.toISOString().split('T')[0]
+    const dateStr = toDateString(row.bucket)
     if (!bucketMap.has(dateStr)) {
       bucketMap.set(dateStr, { nodes: new Map(), links: new Map() })
     }
@@ -512,13 +563,12 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
       source: row.src,
       target: row.tgt,
       pair: row.pair,
-      frequency: Number(row.cnt),
-      avgProfit: row.avg_profit,
-      totalVolumeUsd: row.total_volume,
+      frequency: toNumber(row.cnt),
+      avgProfit: toNumber(row.avg_profit),
+      totalVolumeUsd: toNumber(row.total_volume),
     }
     bucket.links.set(row.pair, link)
 
-    // Aggregate for allLinks
     const existing = allLinksMap.get(row.pair)
     if (existing) {
       existing.frequency += link.frequency
@@ -529,16 +579,13 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
     }
   }
 
-  // Filter links and nodes to ensure all nodes have at least one edge
   const snapshots: GraphSnapshot[] = Array.from(bucketMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, { nodes, links }]) => {
       const nodeIds = new Set(nodes.keys())
-      // First filter: links must connect existing nodes
       const filteredLinks = Array.from(links.values()).filter(
         (l) => nodeIds.has(l.source) && nodeIds.has(l.target)
       )
-      // Second filter: only include nodes that have at least one remaining link
       const connectedNodeIds = new Set<string>()
       for (const link of filteredLinks) {
         connectedNodeIds.add(link.source)
@@ -552,12 +599,10 @@ export async function getGraphTimeline(query: GraphTimelineQuery): Promise<Graph
       }
     })
 
-  // Filter allLinks to only include allNodes, then filter allNodes to only include connected ones
   const allNodeIds = new Set(allNodesMap.keys())
   const filteredAllLinks = Array.from(allLinksMap.values()).filter(
     (l) => allNodeIds.has(l.source) && allNodeIds.has(l.target)
   )
-  // Only include nodes that have at least one link
   const connectedAllNodeIds = new Set<string>()
   for (const link of filteredAllLinks) {
     connectedAllNodeIds.add(link.source)
