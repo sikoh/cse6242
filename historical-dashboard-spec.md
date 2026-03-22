@@ -4,13 +4,13 @@ This document describes the current implementation of the Historical Dashboard f
 
 ## Overview
 
-The Historical Dashboard provides server-side aggregation and visualization of precomputed triangular arbitrage opportunities stored in a PostgreSQL database. The dataset covers 2017-01-01 through 2022-12-31 and is sourced from the `vw_triangle_opportunities_enriched` view. Each row represents a detected opportunity with net profit already accounting for a 0.1% fee per trade leg.
+The Historical Dashboard provides server-side aggregation and visualization of precomputed triangular arbitrage opportunities stored in BigQuery. The dataset covers 2017-01-01 through 2022-12-31 and is sourced from the `vw_triangle_opportunities_enriched` view. Each row represents a detected opportunity with net profit already accounting for a 0.1% fee per trade leg.
 
 Unlike the Live Dashboard (which is client-side only), the Historical Dashboard requires the Express backend to query, aggregate, and serve data to the frontend.
 
 ## Data Source
 
-**Database view**: `vw_triangle_opportunities_enriched` (PostgreSQL, hosted on Google Cloud)
+**Database view**: `vw_triangle_opportunities_enriched` (BigQuery, hosted on Google Cloud)
 
 Key columns used by the backend service:
 
@@ -36,7 +36,7 @@ All historical data flows through four REST endpoints under `/api/historical`. T
 
 ### Backend Query Processing
 
-All endpoints validate query parameters with Zod schemas, execute raw SQL via Prisma's `$queryRaw`, and return JSON with a `meta` object containing `queryTimeMs` for performance monitoring. Validation errors return HTTP 400 with Zod issue details.
+All endpoints validate query parameters with Zod schemas, execute parameterized BigQuery SQL, and return JSON with a `meta` object containing `queryTimeMs` for performance monitoring. Validation errors return HTTP 400 with Zod issue details.
 
 ## API Endpoints
 
@@ -375,7 +375,7 @@ A side sheet (500px wide) that opens when a node is clicked in the network graph
 | File | Purpose |
 |------|---------|
 | `routes/historical.ts` | Express router with Zod validation and response shaping |
-| `services/historical.ts` | Raw SQL queries via Prisma for all 4 endpoints |
+| `services/historical.ts` | Parameterized BigQuery SQL queries for all 4 endpoints |
 | `types/index.ts` | Zod schemas, TypeScript interfaces for all request/response types |
 
 ## Data Flow Diagram

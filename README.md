@@ -2,7 +2,7 @@
 
 A full-stack web application for detecting and visualizing triangular arbitrage opportunities in cryptocurrency markets. Features both historical data analysis (2017–2022) and real-time client-side opportunity detection via Binance WebSocket streams integration.
 
-**Stack**: React 19, Vite 6, Express 5, Node 18+, PostgreSQL, Prisma 7, D3.js v7
+**Stack**: React 19, Vite 6, Express 5, Node 18+, Google BigQuery, D3.js v7
 
 ## Key Features
 
@@ -15,7 +15,7 @@ A full-stack web application for detecting and visualizing triangular arbitrage 
 ## Prerequisites
 
 - **Node.js** 18+ and **pnpm** 9+
-- **PostgreSQL** connection credentials (for historical mode backend)
+- **Google BigQuery** access (for historical mode backend)
 - Internet connection (for Binance API access in live mode)
 
 ```bash
@@ -31,21 +31,27 @@ pnpm --version   # Should be 9+
 pnpm install
 ```
 
-Installs dependencies for both frontend and backend via pnpm workspaces. Prisma client is generated automatically via the backend `postinstall` script.
+Installs dependencies for both frontend and backend via pnpm workspaces.
 
 ### 2. Set Up Environment Variables
 
 #### Backend — `apps/backend/.env`
 
 ```env
-# PostgreSQL connection string (GCP instance)
-DATABASE_URL="postgresql://user:password@host:5432/database?schema=public&connection_limit=10"
+# Fully qualified BigQuery view
+BIGQUERY_VIEW_ID="your-project.your_dataset.vw_triangle_opportunities_enriched"
+
+# Optional if not using BIGQUERY_VIEW_ID directly
+BIGQUERY_PROJECT_ID="your-project"
+BIGQUERY_DATASET="your_dataset"
+BIGQUERY_VIEW="vw_triangle_opportunities_enriched"
+BIGQUERY_LOCATION="US"
 
 # Server port (default: 3001)
 PORT=3001
 ```
 
-You need valid PostgreSQL credentials with access to the `public.vw_triangle_opportunities_enriched` view.
+You need valid Google Cloud credentials with access to the BigQuery view. Application Default Credentials are supported by the BigQuery client.
 
 #### Frontend — `apps/frontend/.env` (optional)
 
@@ -93,7 +99,7 @@ Header (date range + bin controls)
     → Node click → useTriangles(currency) → DetailPanel (slide-out)
 ```
 
-All historical data is served by the Express backend, which queries a PostgreSQL view containing ~1M pre-computed triangular arbitrage opportunities with volatility and liquidity metrics.
+All historical data is served by the Express backend, which queries a BigQuery view containing ~1M pre-computed triangular arbitrage opportunities with volatility and liquidity metrics.
 
 ### Live Mode — Data Flow
 
@@ -131,13 +137,11 @@ All endpoints accept `startDate` and `endDate` query parameters (ISO date string
 cse6242/                          # Monorepo root
 ├── apps/
 │   ├── backend/                  # Express 5 API server
-│   │   ├── prisma/
-│   │   │   └── schema.prisma     # Prisma schema (PostgreSQL view)
 │   │   └── src/
 │   │       ├── index.ts          # Express app entry point
 │   │       ├── routes/           # API route handlers
-│   │       ├── services/         # Business logic & raw SQL queries
-│   │       ├── lib/              # Prisma client setup (pg adapter)
+│   │       ├── services/         # Business logic & BigQuery SQL queries
+│   │       ├── lib/              # BigQuery client setup
 │   │       └── types/            # Zod schemas & TypeScript types
 │   │
 │   └── frontend/                 # React 19 SPA (Vite 6)
@@ -187,8 +191,7 @@ cse6242/                          # Monorepo root
 | Library         | Purpose                                    |
 | --------------- | ------------------------------------------ |
 | Express 5       | REST API framework                         |
-| Prisma 7        | ORM with `@prisma/adapter-pg` for raw Pool |
-| PostgreSQL (pg) | Database driver with connection pooling    |
+| Google BigQuery | Historical analytics data source           |
 | Zod 4           | Request validation schemas                 |
 | dotenv          | Environment variable loading               |
 | tsx             | TypeScript execution with file watching    |
@@ -212,18 +215,12 @@ pnpm lint        # Lint only
 pnpm format      # Auto-fix formatting
 ```
 
-### Regenerate Prisma Client
-
-```bash
-pnpm --filter @cse6242/backend db:generate
-```
-
 ## Troubleshooting
 
 | Problem                         | Solution                                                             |
 | ------------------------------- | -------------------------------------------------------------------- |
-| `DATABASE_URL is not set`       | Create `apps/backend/.env` with a valid PostgreSQL connection string |
-| `ECONNREFUSED` on backend start | Verify PostgreSQL is reachable and credentials are correct           |
+| BigQuery config is not set      | Create `apps/backend/.env` with `BIGQUERY_VIEW_ID` or the project/dataset vars |
+| Backend query/auth errors       | Verify Google Cloud credentials and BigQuery dataset access         |
 | Frontend API errors             | Ensure backend is running on `http://localhost:3001`                 |
 | Port conflict (5173)            | `pnpm dev:frontend -- --port 5174`                                   |
 | Port conflict (3001)            | `PORT=3002 pnpm dev:backend`                                         |
