@@ -1,41 +1,55 @@
 # Triangular Arbitrage Visualization
 
-This repository is a pnpm workspace with two applications:
+This repository is a `pnpm` workspace with two apps:
 
-- `apps/frontend`: a React + Vite dashboard with two modes
-- `apps/backend`: an Express API used by the historical dashboard
+- `apps/frontend`: a React + Vite dashboard
+- `apps/backend`: an Express API for historical data
 
-The app supports:
+The project supports two modes:
 
-- `Live` mode: client-side triangular arbitrage detection using Binance US REST/WebSocket data
-- `Historical` mode: BigQuery-backed exploration of precomputed arbitrage data from `2017-01-01` through `2022-12-31`
+- `Live` mode: real-time triangular arbitrage detection using Binance US market data
+- `Historical` mode: a BigQuery-backed dashboard for precomputed historical opportunities
 
-## What You Need
+## Before You Start
 
-You do not need a Python `requirements.txt` for this project. Dependencies are managed with:
+This project does not use Python or a `requirements.txt`. Dependencies are managed with the repo's Node workspace files:
 
-- [package.json](/Users/silvy/code/school/cse6242/package.json)
-- [pnpm-lock.yaml](/Users/silvy/code/school/cse6242/pnpm-lock.yaml)
+- `package.json`
+- `pnpm-lock.yaml`
 
 Install these tools first:
 
 - Node.js `18+`
 - `pnpm` `9+`
 
-Recommended setup on a new machine:
+Check your versions:
 
 ```bash
 node --version
+pnpm --version
+```
+
+If you do not already have `pnpm`, the easiest setup is usually:
+
+```bash
 corepack enable
 corepack prepare pnpm@latest --activate
 pnpm --version
 ```
 
-If `corepack` is not available, install pnpm another way:
+If `corepack` is unavailable, install `pnpm` globally:
 
 ```bash
 npm install -g pnpm
 pnpm --version
+```
+
+## Clone And Install
+
+From the repository root, install all workspace dependencies:
+
+```bash
+pnpm install
 ```
 
 ## Project Layout
@@ -44,7 +58,7 @@ pnpm --version
 cse6242/
 ├── apps/
 │   ├── backend/    # Express API for historical mode
-│   └── frontend/   # React/Vite single-page app
+│   └── frontend/   # React/Vite dashboard
 ├── README.md
 ├── USER_GUIDE.md
 ├── historical-dashboard-spec.md
@@ -54,90 +68,19 @@ cse6242/
 └── pnpm-workspace.yaml
 ```
 
-## Install Dependencies
+## Choose How You Want To Run The App
 
-From the repo root:
+### Option 1: Live Dashboard Only
 
-```bash
-pnpm install
-```
+Choose this if you want the real-time dashboard and do not need historical data.
 
-That installs dependencies for both workspace apps.
-
-## Environment Setup
-
-### Frontend env
-
-Copy the example file:
-
-```bash
-cp apps/frontend/.env.example apps/frontend/.env
-```
-
-Default values:
-
-```env
-VITE_API_URL=/api
-VITE_BINANCE_REST_URL=https://api.binance.us
-VITE_BINANCE_WS_URL=wss://stream.binance.us:9443/stream
-```
-
-Notes:
-
-- In local development, Vite proxies `/api` to `http://localhost:3001`
-- If you keep the defaults, you can usually skip creating `apps/frontend/.env`
-
-### Backend env
-
-Historical mode requires the backend. Copy the example file:
-
-```bash
-cp apps/backend/.env.example apps/backend/.env
-```
-
-Required BigQuery configuration:
-
-```env
-PORT=3001
-BIGQUERY_VIEW_ID=your-project.your_dataset.vw_triangle_opportunities_enriched
-BIGQUERY_LOCATION=US
-```
-
-You can also build the view ID from separate values:
-
-```env
-BIGQUERY_PROJECT_ID=your-project
-BIGQUERY_DATASET=your_dataset
-BIGQUERY_VIEW=vw_triangle_opportunities_enriched
-```
-
-This codebase is currently written to pass inline credentials through env vars:
-
-```env
-GOOGLE_APPLICATION_CREDENTIALS_EMAIL=service-account@your-project.iam.gserviceaccount.com
-GOOGLE_APPLICATION_CREDENTIALS_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-```
-
-Important details:
-
-- `BIGQUERY_VIEW_ID` must be in `project.dataset.view` format
-- The historical backend will fail at startup if BigQuery configuration is missing
-- The live dashboard does not need the backend
-- The private key must preserve escaped newlines exactly as shown above
-
-## How To Run
-
-### Option 1: Run live mode only
-
-Use this if you only want the real-time dashboard.
-
-Terminal 1:
+You only need the frontend:
 
 ```bash
 pnpm dev:frontend
 ```
 
-Then open:
+Open:
 
 - `http://localhost:5173`
 
@@ -148,71 +91,118 @@ What works in this mode:
 - Binance US WebSocket streaming
 - Client-side arbitrage detection
 
-What will not work:
+What does not work in this mode:
 
 - Historical dashboard API calls
 
-### Option 2: Run the full app
+### Option 2: Full App
 
-Use this if you want both live mode and historical mode.
+Choose this if you want both live mode and historical mode.
 
-Terminal 1:
+Start the backend in one terminal:
 
 ```bash
 pnpm dev:backend
 ```
 
-Terminal 2:
+Start the frontend in a second terminal:
 
 ```bash
 pnpm dev:frontend
 ```
 
-Then open:
+Open:
 
 - Frontend: `http://localhost:5173`
 - Backend health check: `http://localhost:3001/health`
 
-You can also start both from one command:
+You can also start both with one command:
 
 ```bash
 pnpm dev
 ```
 
-That root script runs backend and frontend together, but using two terminals is usually easier for debugging.
+Using two terminals is usually easier when debugging startup issues.
 
-## Build And Preview
+## Environment Setup
 
-Build both apps:
+### Frontend
 
-```bash
-pnpm build
+The frontend works with its built-in defaults, so most users can skip this step.
+
+Default frontend values:
+
+```env
+VITE_API_URL=/api
+VITE_BINANCE_REST_URL=https://api.binance.us
+VITE_BINANCE_WS_URL=wss://stream.binance.us:9443/stream
 ```
 
-Outputs:
+If you want to override them, create `apps/frontend/.env` from `apps/frontend/.env.example`.
 
-- backend build: `apps/backend/dist`
-- frontend build: `apps/frontend/dist`
-
-Run the built backend:
+On macOS or Linux:
 
 ```bash
-pnpm --filter @cse6242/backend start
+cp apps/frontend/.env.example apps/frontend/.env
 ```
 
-Preview the built frontend:
+On Windows PowerShell:
+
+```powershell
+Copy-Item apps/frontend/.env.example apps/frontend/.env
+```
+
+Notes:
+
+- In local development, Vite proxies `/api` to `http://localhost:3001`
+- If you keep the defaults, you usually do not need a frontend `.env` file
+
+### Backend
+
+The backend is required for historical mode.
+
+Create `apps/backend/.env` from `apps/backend/.env.example`.
+
+On macOS or Linux:
 
 ```bash
-pnpm --filter @cse6242/frontend preview
+cp apps/backend/.env.example apps/backend/.env
 ```
 
-Default preview URL is typically:
+On Windows PowerShell:
 
-- `http://localhost:4173`
+```powershell
+Copy-Item apps/backend/.env.example apps/backend/.env
+```
+
+Required values:
+
+```env
+PORT=3001
+BIGQUERY_VIEW_ID=your-project.your_dataset.vw_triangle_opportunities_enriched
+BIGQUERY_LOCATION=US
+GOOGLE_APPLICATION_CREDENTIALS_EMAIL=service-account@your-project.iam.gserviceaccount.com
+GOOGLE_APPLICATION_CREDENTIALS_KEY="-----BEGIN PRIVATE KEY-----\nREPLACE_ME\n-----END PRIVATE KEY-----\n"
+```
+
+You can also define the BigQuery view with separate values instead of `BIGQUERY_VIEW_ID`:
+
+```env
+BIGQUERY_PROJECT_ID=your-project
+BIGQUERY_DATASET=your_dataset
+BIGQUERY_VIEW=vw_triangle_opportunities_enriched
+```
+
+Important details:
+
+- `BIGQUERY_VIEW_ID` must use `project.dataset.view` format
+- The backend will fail at startup if BigQuery settings are missing or invalid
+- The live dashboard does not need the backend
+- The private key must keep the escaped `\n` sequences exactly as shown
 
 ## Available Scripts
 
-From the repo root:
+Run these from the repo root:
 
 ```bash
 pnpm dev
@@ -227,18 +217,47 @@ pnpm check
 
 What they do:
 
-- `pnpm dev`: starts both apps
-- `pnpm dev:backend`: starts the Express server with `tsx watch`
-- `pnpm dev:frontend`: starts Vite dev server on port `5173`
-- `pnpm build`: builds backend then frontend
-- `pnpm typecheck`: runs TypeScript checks in both apps
-- `pnpm lint`: runs Biome lint rules
-- `pnpm format`: formats the repo with Biome
-- `pnpm check`: runs Biome's combined checks
+- `pnpm dev`: starts backend and frontend together
+- `pnpm dev:backend`: starts the Express backend with file watching
+- `pnpm dev:frontend`: starts the Vite dev server on port `5173`
+- `pnpm build`: builds backend and frontend
+- `pnpm typecheck`: runs TypeScript checks across both apps
+- `pnpm lint`: runs Biome linting
+- `pnpm format`: formats files with Biome
+- `pnpm check`: runs Biome checks
+
+## Build And Preview
+
+Build both apps:
+
+```bash
+pnpm build
+```
+
+Build outputs:
+
+- backend: `apps/backend/dist`
+- frontend: `apps/frontend/dist`
+
+Run the built backend:
+
+```bash
+pnpm --filter @cse6242/backend start
+```
+
+Preview the built frontend:
+
+```bash
+pnpm --filter @cse6242/frontend preview
+```
+
+The preview URL is usually:
+
+- `http://localhost:4173`
 
 ## API Summary
 
-The backend mounts historical endpoints at:
+The backend exposes:
 
 - `GET /health`
 - `GET /api/historical/summary`
@@ -253,80 +272,43 @@ The frontend currently uses:
 - `/graph-timeline`
 - `/triangles`
 
-The `graph` and `opportunities` endpoints exist in the backend but are not currently used by the main dashboard UI.
-
-## Current Runtime Behavior
-
-### Live mode
-
-- Uses Binance US endpoints by default, not global Binance
-- Filters exchange pairs to symbols involving one of: `USDT`, `USD`, `USDC`, `BTC`, `ETH`
-- Limits WebSocket subscriptions to `300` streams
-- Stores live settings in `localStorage`
-- Runs arbitrage detection in a Web Worker
-- Counts only profitable events in the large `Opportunities` card
-
-### Historical mode
-
-- Uses date defaults `2017-01-01` to `2022-12-31`
-- Fetches summary stats and graph snapshots from the backend
-- Animates graph playback client-side after snapshot data loads
-- Opens a detail drawer when you click a node
-- Shows up to `50` triangle rows in that drawer, sorted by count
-
-## Verification
-
-I verified the current repo state with:
-
-```bash
-pnpm typecheck
-pnpm build
-```
-
-Both succeeded locally.
-
-`pnpm check` does not currently pass cleanly. The main reasons are:
-
-- existing accessibility warnings in several UI components
-- generated `dist/` files being included in Biome checks after a build
-
 ## Troubleshooting
 
-### Frontend opens but historical mode errors out
+### Historical mode is not working
 
-Most likely causes:
+Check these first:
 
-- backend is not running
-- `apps/backend/.env` is missing
-- BigQuery credentials are invalid
-- the configured BigQuery view does not exist or is not accessible
+- the backend is running
+- `apps/backend/.env` exists
+- BigQuery credentials are valid
+- the configured BigQuery view exists and is accessible
 
 ### Backend crashes on startup
 
 Check:
 
-- `BIGQUERY_VIEW_ID` or `BIGQUERY_PROJECT_ID` + `BIGQUERY_DATASET`
-- service account email/private key values
+- `BIGQUERY_VIEW_ID` or `BIGQUERY_PROJECT_ID` and `BIGQUERY_DATASET`
+- `GOOGLE_APPLICATION_CREDENTIALS_EMAIL`
+- `GOOGLE_APPLICATION_CREDENTIALS_KEY`
 - `BIGQUERY_LOCATION`
 
-### Live mode shows no data
+### Live mode shows no market data
 
 Check:
 
-- internet access
-- browser console for WebSocket issues
+- your internet connection
 - whether Binance US endpoints are reachable from your network
-- whether your selected coins produce enough pairs/triangles
+- the browser console for WebSocket errors
 
-### Port already in use
+### A port is already in use
 
-Backend on a different port:
+Run the backend on a different port:
 
 ```bash
 PORT=3002 pnpm dev:backend
 ```
 
-Frontend on a different port:
+Run the frontend on a different port:
 
 ```bash
 pnpm --filter @cse6242/frontend dev -- --port 5174
