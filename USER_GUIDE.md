@@ -1,388 +1,484 @@
-# Triangular Arbitrage Visualization - User Guide
+# User Guide
 
-Welcome to the Triangular Arbitrage Visualization platform! This guide will help you understand and use both the **Live Dashboard** and the **Historical Dashboard** to explore cryptocurrency arbitrage opportunities.
+This guide is written for someone who is completely new to crypto, trading, and triangular arbitrage.
 
-## Table of Contents
+You do not need trading experience to explore this app. Think of it as a visualization tool that helps you see price relationships between cryptocurrencies.
 
-1. [Overview](#overview)
-2. [Getting Started](#getting-started)
-3. [Live Dashboard](#live-dashboard)
-4. [Historical Dashboard](#historical-dashboard)
-5. [Understanding the Metrics](#understanding-the-metrics)
-6. [Troubleshooting](#troubleshooting)
-7. [Tips & Best Practices](#tips--best-practices)
+## What This App Does
 
----
+The app has two views:
 
-## Overview
+- `Live`: shows price relationships happening right now using Binance US market data
+- `Historical`: shows patterns from stored past data between `2017-01-01` and `2022-12-31`
 
-### What is Triangular Arbitrage?
+The app is for learning and analysis.
 
-Triangular arbitrage is a trading strategy that exploits price discrepancies across three cryptocurrencies. For example:
-- You convert Currency A to Currency B
-- You convert Currency B to Currency C
-- You convert Currency C back to Currency A
+It is not a trading bot.
 
-If the prices are favorable, you end up with more of Currency A than you started with — that's profit!
+It is not financial advice.
 
-### The Two Dashboards
+## What "Triangular Arbitrage" Means
 
-This platform provides two complementary tools:
+You do not need to memorize the term, but here is the simple idea:
 
-- **Live Dashboard**: Real-time detection of arbitrage opportunities happening RIGHT NOW on Binance
-- **Historical Dashboard**: Analysis of historical opportunities from 2017–2022 based on actual market data
+1. Start with one currency.
+2. Exchange it for a second currency.
+3. Exchange that for a third currency.
+4. Exchange that back to the first currency.
 
----
+If you end up with more than you started with, that is a possible arbitrage opportunity.
 
-## Getting Started
+Example:
 
-### Switching Between Dashboards
+- Start with USD
+- Buy BTC
+- Trade BTC for ETH
+- Trade ETH back to USD
 
-At the top of the application, you'll see a **Mode Toggle** button:
-- Click the toggle to switch between **Live** and **Historical** modes
-- Your selection is automatically saved so you return to the same mode next time
+If that loop would leave you with more USD than you started with, the app marks that as a potentially profitable cycle.
 
-### Universal Controls (Available in Both Modes)
+In real markets, this is hard to execute because prices move quickly and fees matter. That is why this app should be treated as an educational dashboard.
 
-Regardless of which dashboard you're viewing, you'll see:
+## The Two Modes
 
-- **Connection Status** (Live only): Indicates whether the platform is connected to cryptocurrency data
-- **Pause/Resume**: Temporarily stop data collection
-- **Clear**: Remove all detected opportunities from the list
+### Live Mode
 
----
+Use this when you want to watch the market in real time.
 
-## Live Dashboard
+The app:
 
-The **Live Dashboard** shows **real-time arbitrage opportunities** as they occur on Binance. This is a powerful tool for traders who want to identify profitable trades as they happen.
+- downloads available trading pairs from Binance US
+- listens to live price updates
+- checks whether any 3-currency loops look profitable
 
-### What You're Looking At
+### Historical Mode
 
-The Live Dashboard consists of three main sections:
+Use this when you want to study past patterns.
 
-#### 1. **Controls Bar** (Top)
+The app:
 
-Adjust detection parameters on the fly:
+- loads saved historical data from the backend
+- summarizes how many opportunities existed in a date range
+- shows how the currency network changed over time
 
-| Control | What It Does | Typical Range |
-|---------|-------------|--------------|
-| **Fee %** | Trading fee per transaction leg (e.g., Binance charges ~0.1%) | 0.00% - 1.00% |
-| **Min Profit %** | Minimum profit threshold to display | 0.05% - 2.00% |
-| **Notional $** | Starting trade amount for profit calculation | $1 - $100,000 |
-| **Show Near-Misses** | Also display near-miss opportunities (profit -0.5% to 0%) | Toggle ON/OFF |
-| **Stale Minutes** | How long before an opportunity fades in the graph | 1 - 60 min |
+## First-Time Quick Start
 
-**Tip**: Adjust these based on your trading strategy. Higher fees? Increase "Min Profit %". Want to see more opportunities? Lower the threshold.
+If you are brand new, this is the easiest way to explore the app:
 
-#### 2. **Statistics Cards** (Below Controls)
+1. Open the app.
+2. Start in `Live` mode.
+3. Wait 10 to 30 seconds for data to begin filling in.
+4. Watch the `Messages/sec`, `Price Map`, and `Opportunities` cards.
+5. Look at the graph and the `Live Triangles` panel.
+6. Click a few cards and graph nodes to see the extra detail panels.
+7. Switch to `Historical` mode to compare what the market looked like in the past.
 
-Six cards displaying key metrics:
+If live mode feels too busy, switch to historical mode first. It is slower and easier to understand.
 
-| Metric | Meaning |
-|--------|---------|
-| **Base Coins** | Number of cryptocurrencies being monitored (click to select/deselect) |
-| **Pairs** | Total trading pairs across selected cryptocurrencies |
-| **Possible Triangles** | Total three-currency combinations that could create arbitrage loops |
-| **Messages/sec** | Real-time message rate from Binance (higher = more market activity) |
-| **Price Map** | How many trading pairs have received price data |
-| **Opportunities** | Running total of opportunities detected during this session |
+## How To Switch Between Modes
 
-**Interactive**: Click any stat card to open a detailed view of that data.
+There is a mode toggle in the header.
 
-#### 3. **Main Content Area** (Split Screen)
+- `Live` gives you streaming data and live detection
+- `Historical` gives you date filters and time-based playback
 
-**Left Side: Network Graph (2/3 width)**
-- Visual representation of trading pairs and currencies
-- Each **node** (circle) represents a cryptocurrency (e.g., BTC, ETH, USDT)
-- Each **link** (line) represents a trading pair (e.g., BTC↔ETH)
-- **Node Colors** indicate opportunity type:
-  - 🟢 **Bright Green** = Currency involved in profitable opportunities
-  - 🟡 **Amber/Gold** = Currency involved only in near-miss opportunities
-  - ⚪ **Gray** = No recent opportunities
-- **Edge Colors** show opportunity status:
-  - 🟢 **Bright Green** (full brightness) = Active profitable trades
-  - 🟡 **Amber/Gold** (faded) = Active near-miss trades
-  - ⚪ **Gray** (dim) = No events detected
-- **Node Size**: Larger nodes = more opportunity volume involving that currency
-- **Link Thickness**: Thicker lines = more frequent trading pair usage
-- **Interactions**:
-  - Click on a currency (node) to see all its triangles in the detail panel
-  - Drag nodes to reposition for better viewing
-  - Scroll to zoom in/out
-  - Toggle **"Active only"** to show only recent opportunities
-
-**Right Side: Live Triangles Feed (1/3 width)**
-- Scrollable list of detected opportunities, grouped by triangle
-- Each group shows:
-  - Triangle path (e.g., BTC → ETH → USDT)
-  - Direction (forward or reverse)
-  - Average profit %
-  - Total volume (USD)
-  - Time when most recent opportunity was detected
-- **Click to expand** any row to see individual opportunities within that triangle
-
-### How to Use the Live Dashboard
-
-#### Basic Workflow
-
-1. **Start Monitoring**
-   - Open the Live Dashboard
-   - Review the statistics cards to see network health
-   - Ensure "Connection Status" shows ✅ "connected"
-
-2. **Adjust Parameters** (Optional)
-   - Set your acceptable fee % (default: 0.1%)
-   - Set your minimum profit threshold
-   - Decide your notional trade amount
-   
-3. **Watch for Opportunities**
-   - New opportunities appear in the **Live Triangles** feed on the right
-   - The Network Graph highlights profitable trades in green
-   - Amber events show near-misses (close but unprofitable)
-
-4. **Investigate an Opportunity**
-   - Click on a triangle in the feed to expand and see details
-   - Click on a currency node in the graph to see all its triangles
-   - For each triangle, note:
-     - The three currencies involved
-     - The direction (forward or reverse)
-     - The profit percentage
-     - The volume (higher volume = more liquidity)
-
-5. **Filter Results**
-   - Toggle **"Show Near-Misses"** to hide close-but-unprofitable opportunities
-   - Adjust **"Stale Minutes"** to control how long opportunities remain visible
-   - Toggle **"Active only"** to filter the graph to recent activity only
-
-#### Advanced Tips
-
-- **Volume Matters**: Higher USD volume indicates more liquidity and easier execution
-- **Time Sensitivity**: The timestamp tells you how recent the opportunity is (fresher = better)
-- **Direction**: Some opportunities work better in one direction than the reverse
-- **Multiple Opportunities**: If the same triangle appears repeatedly, it's a reliable pattern
-
----
-
-## Historical Dashboard
-
-The **Historical Dashboard** analyzes **historical arbitrage data from 2017–2022**. Use this to understand patterns, trends, and which currencies/triangles were most profitable.
-
-### What You're Looking At
-
-The Historical Dashboard has four main sections:
-
-#### 1. **Date & Interval Controls** (Top, in Header)
-
-| Control | What It Does |
-|---------|-------------|
-| **Start Date** | Beginning of date range to analyze |
-| **End Date** | End of date range |
-| **Interval** | Time bucket size for grouping data: Day / Month / Year |
-
-**Example**: Select Jan 2017 – Dec 2022 with "Month" interval to see monthly trends.
-
-#### 2. **Summary Cards** (Below Controls)
-
-Six metric cards showing aggregate statistics:
-
-| Metric | Meaning |
-|--------|---------|
-| **Total Opportunities** | Total arbitrage events in selected date range |
-| **Avg Profit %** | Average profit across all opportunities |
-| **Max Profit %** | Highest single profit observed |
-| **Total Volume** | Total USD volume traded across opportunities |
-| **Unique Triangles** | How many distinct triangle combinations were found |
-| **Currencies** | How many different cryptocurrencies participated |
-
-#### 3. **Main Content Area** (Split Screen)
-
-**Left Side: Network Graph (2/3 width)**
-- Shows the **aggregate network** of all triangles in the selected period
-- **Node Size**: Larger circles = more opportunities involving that currency (more central to arbitrage activity)
-- **Link Thickness**: Thicker lines = higher frequency of trading pair usage
-- **Link Colors**: Gradient colors represent opportunity density/frequency on that trading pair
-- **Visibility**: Nodes and links are prominently sized for clear visibility at any zoom level
-
-**Playback Controls** (Below the graph):
-- ⏮️ **Step Backward** / ⏭️ **Step Forward**: Move one month (or day/year) at a time
-- ▶️ **Play** / ⏸️ **Pause**: Automatically animate through time
-- **Timeline Slider**: Scrub to jump to any point in time
-- **Speed Selector**: Choose playback speed (0.5x, 1x, 2x, 4x)
-
-**Right Side: Opportunities Over Time Chart (1/3 width)**
-- **Upper line (blue)**: Total count of opportunities per time bucket
-- **Lower line (yellow)**: Maximum profit % observed in that bucket
-- **X-axis**: Timeline matching the Network Graph animation
-- Hover over the chart to see exact values
-
-#### 4. **Graph Filters** (Settings icon in graph card)
-
-Advanced filtering options:
-
-| Filter | What It Does |
-|--------|-------------|
-| **Min Frequency** | Hide currencies/pairs with fewer than X opportunities |
-| **Min Profit %** | Exclude opportunities with profit below X% |
-
-**Example**: Set Min Frequency to 100 to focus only on frequently-occurring triangles.
-
-### How to Use the Historical Dashboard
-
-#### Basic Workflow
-
-1. **Select a Date Range**
-   - Click **Start Date** and pick a beginning date (default: 2017-01-01)
-   - Click **End Date** and pick an ending date (default: 2022-12-31)
-   - Press Tab or click elsewhere to apply
+The app remembers your last selected mode in the browser.
 
-2. **Choose a Time Interval**
-   - Select **Day** for daily granularity (detailed but slow)
-   - Select **Month** for monthly view (recommended, balanced)
-   - Select **Year** for yearly overview (aggregated)
+## Live Mode, Explained Simply
 
-3. **Review Summary Metrics**
-   - Read the six summary cards to understand the overall market
-   - Example: "In 2021, there were 400K opportunities averaging 0.3% profit"
+Live mode tries to answer this question:
 
-4. **Animate Through Time**
-   - Press ▶️ **Play** to see how the network evolved over time
-   - Watch how nodes grow/shrink and links appear/disappear
-   - The chart on the right shows corresponding opportunity counts
-   - Adjust speed if animation is too fast/slow
+"If I followed a 3-step currency loop right now, would the prices suggest a profit?"
 
-5. **Scrub to Specific Dates**
-   - Use the **Timeline Slider** to jump to any date
-   - Or use ⏮️ / ⏭️ buttons to step through one bucket at a time
+### What You Will See
 
-6. **Investigate Specific Triangles**
-   - Click on any **currency node** (circle) in the graph
-   - A side panel opens showing **all triangles involving that currency**
-   - For each triangle, see:
-     - How many times it occurred
-     - Average & max profit
-     - Total USD volume
-     - Last time it was observed
-   - Sort by count, profit, or volume to find the best performers
+There are three main sections:
 
-#### Advanced Filtering
+1. A control bar at the top
+2. A row of summary cards
+3. A main area with a graph on the left and an opportunity list on the right
 
-1. Click the **⚙️ Settings** icon in the graph card header
-2. Adjust **Min Frequency**: Focus on only the most common triangles
-3. Adjust **Min Profit %**: Exclude low-profit opportunities
-4. The graph updates in real-time to reflect your filters
+### Top Control Bar
 
-#### Example Analysis Scenarios
+These controls change how the app looks at live market data.
 
-**Scenario 1: Find the Most Profitable Triangle (2021)**
-1. Set dates: 2021-01-01 to 2021-12-31
-2. Set interval: Month
-3. Click Play to watch the year evolve
-4. Click on a node when you see big triangles forming
-5. In the side panel, sort by "Max Profit"
-6. Identify the best performer
+`Connection Status`
 
-**Scenario 2: Track Evolution of a Currency Over Time**
-1. Set dates: 2017-01-01 to 2022-12-31
-2. Set interval: Year
-3. Click Play to see how BTC, ETH, etc. grew from 2017–2022
-4. Notice which nodes stayed active throughout (most mature/liquid)
+- Shows whether the app is connected to the live market stream
+- If it says disconnected or error, use `Reconnect`
 
-**Scenario 3: Compare Different Time Periods**
-1. Set interval: Month
-2. Analyze Jan–Jun 2017 (early days, few opportunities)
-3. Switch to Jan–Jun 2021 (DeFi boom, many opportunities)
-4. Compare summary cards to see growth
+`Pause / Resume`
 
----
+- `Pause` stops the app from processing new live price updates
+- `Resume` starts processing again
 
-## Understanding the Metrics
+`Clear`
 
-### Profit %
+- Removes the opportunities currently shown in the session
+- This is useful if you want to "start fresh" and watch new events appear
 
-**Definition**: How much profit you make relative to your starting amount, after accounting for trading fees.
+`Fee %`
 
-**Formula**:
-```
-Profit % = ((Final Amount - Starting Amount) / Starting Amount) × 100
-```
+- This tells the app how much trading cost to assume for each trade step
+- Higher fees make opportunities less likely to appear profitable
+- If you are unsure, leave it at the default
 
-**Examples**:
-- Profit % = 0.3% with $1,000 start = $1,003 finish
-- Profit % = 1.0% with $10,000 start = $10,100 finish
+`Min Profit`
 
-**Note**: Includes trading fees (typically 0.1% per leg × 3 legs = 0.3% total cost).
+- This is the minimum profit percentage the app should show as a real opportunity
+- Higher value = fewer, stricter results
+- Lower value = more results
 
-### Volume (USD)
+`Notional $`
 
-**Definition**: Total USD value of cryptocurrency traded across all three legs of the triangle.
+- This is the starting dollar amount used in the calculation
+- You can think of it as "How much money am I pretending to start with?"
 
-**Why it matters**:
-- Higher volume = more liquidity = easier to execute
-- Lower volume = harder to buy/sell at predicted prices
+`Stale`
 
-### Frequency
+- This controls how long an opportunity stays highlighted in the graph
+- A smaller value makes old highlights disappear sooner
 
-**Definition**: How many times a specific triangle or trading pair appeared in the opportunities list.
+`Near Misses`
 
-**Why it matters**:
-- High frequency = stable, repeatable pattern
-- Low frequency = rare, one-off opportunity
+- When this is on, the app also shows cycles that are close to profitable but not quite there
+- This is helpful for learning because it shows "almost" opportunities too
 
-### Triangles
+### Summary Cards
 
-**Definition**: A set of three distinct cryptocurrencies that form a trading loop.
+These cards give you a quick overview of what the app is monitoring.
 
-**Example**: BTC → ETH → USDT → BTC
+`Base Coins`
 
-**Unique Triangle Count**: Total number of distinct triangle combinations.
+- How many important currencies are being used as anchors for the live search
+- Clicking this opens a selector so you can change them
 
-### Direction
+`Pairs`
 
-**Definition**: The order in which you traverse the triangle.
+- How many trading pairs are currently included
+- Example: `BTC/USD` is a pair
 
-- **Forward**: A → B → C → A
-- **Reverse**: C → B → A → C
+`Possible Triangles`
 
-Sometimes one direction is profitable, the other isn't.
+- How many 3-currency loops the app was able to build from the available pairs
 
----
+`Messages/sec`
+
+- How many live price updates the app is receiving each second
+- Higher number usually means the live stream is active and healthy
+
+`Price Map`
+
+- How many pairs have already received at least one price update
+- This often grows soon after live mode starts
+
+`Opportunities`
+
+- How many profitable live detections have happened in the current session
+- This number resets if you press `Clear`
+
+### The Live Network Graph
+
+The graph is a picture of the currency relationships.
+
+`Circles`
+
+- Each circle is a currency, such as `BTC`, `ETH`, or `USD`
+
+`Lines`
+
+- Each line is a trading pair connecting two currencies
+
+How to read it:
+
+- green usually means profitable activity
+- amber means near-miss activity
+- dimmer lines usually mean older activity
+- gray means no recent interesting event
+
+What you can do:
+
+- click a node to select it
+- drag nodes to move them
+- zoom in and out
+- turn on `Active only` to hide the quiet parts of the network
+
+### The Live Triangles Panel
+
+This panel lists grouped live opportunities.
+
+Each row tells you:
+
+- which 3 currencies are involved
+- whether the opportunity is in the forward or reverse direction
+- how recently it happened
+- the total estimated volume
+- the average profit for that group
+
+If you click a row, it expands to show the underlying grouped entries.
+
+If the panel is empty, that does not mean the app is broken. It may simply mean:
+
+- there is no profitable loop right now
+- your `Min Profit` is set too high
+- you need to wait a bit longer for more live data
+
+## Historical Mode, Explained Simply
+
+Historical mode helps answer questions like:
+
+- Which currencies showed up often in the past?
+- When were opportunities more common?
+- How did the network change over time?
+
+### What You Will See
+
+There are four main parts:
+
+1. Date controls in the header
+2. Summary cards
+3. A network graph
+4. A chart showing activity over time
+
+### Date Controls
+
+At the top of the page in historical mode, you can choose:
+
+- `Start` date
+- `End` date
+- `Interval`
+
+`Interval` means how the data should be grouped:
+
+- `Day`: most detailed
+- `Month`: easiest for most people
+- `Year`: broad overview
+
+If you are new, start with `Month`.
+
+### Summary Cards
+
+These cards describe the selected date range.
+
+`Total Opportunities`
+
+- How many opportunities were found in the selected time period
+
+`Average Profit`
+
+- The average profit percentage across the selected period
+
+`Max Profit`
+
+- The single highest profit percentage seen in that period
+
+`Total Volume`
+
+- The total dollar volume associated with the opportunities
+
+`Unique Triangles`
+
+- How many different 3-currency loops appeared
+
+`Currencies`
+
+- How many different currencies appeared in the selected data
+
+### Historical Network Graph
+
+This graph shows the currency network for the selected time bucket.
+
+It helps you see:
+
+- which currencies were more central
+- which connections appeared more often
+- how the network changed over time
+
+You can:
+
+- click a node to open more details
+- zoom and drag the graph
+- use the playback controls to move through time
+
+### Playback Controls
+
+These controls sit below the graph.
+
+You can:
+
+- step backward one snapshot
+- play the timeline like an animation
+- pause
+- step forward one snapshot
+- drag the slider to a specific time
+- change playback speed
+
+This lets you watch the network evolve over time.
+
+### Graph Filters
+
+The graph controls let you reduce clutter.
+
+`Min Frequency`
+
+- Hides currencies and links that appear too rarely
+
+`Min Profit %`
+
+- Hides low-profit data from the graph
+
+If the graph feels too crowded, increase `Min Frequency`.
+
+### Detail Drawer
+
+When you click a currency in the historical graph, a side drawer opens.
+
+It shows:
+
+- how many triangle groups include that currency
+- the best average profit among those results
+- the total volume across those results
+- a table of triangle rows
+
+Each table row includes:
+
+- the three currencies in the loop
+- how many times it appeared
+- average profit
+- max profit
+- total volume
+- when it was last seen
+
+This is a good way to answer questions like:
+
+- "What loops involved BTC?"
+- "Was ETH part of many strong opportunities?"
+
+## A Simple Way To Explore The App
+
+If you are unsure where to begin, try this path:
+
+### Beginner Path 1: Live Mode
+
+1. Open `Live` mode.
+2. Wait for the connection to settle.
+3. Confirm `Messages/sec` is above zero.
+4. Watch `Price Map` increase.
+5. Leave `Fee %` and `Notional $` at the defaults.
+6. Turn on `Near Misses` if the list looks empty.
+7. Lower `Min Profit` a little if you want to see more activity.
+
+### Beginner Path 2: Historical Mode
+
+1. Switch to `Historical`.
+2. Set the interval to `Month`.
+3. Keep the full date range first.
+4. Look at the summary cards.
+5. Press play below the graph.
+6. Click one or two large nodes to inspect them.
+
+## Plain-Language Meanings Of Common Terms
+
+`Currency`
+
+- A digital asset or money unit, such as `BTC`, `ETH`, or `USD`
+
+`Pair`
+
+- A market between two currencies
+- Example: `BTCUSD`
+
+`Triangle`
+
+- A 3-currency loop
+
+`Profit %`
+
+- The estimated percentage gain or loss for a loop
+
+`Volume`
+
+- The approximate dollar amount associated with the opportunity
+
+`Frequency`
+
+- How often something appeared
+
+`Node`
+
+- A circle in the graph
+
+`Link`
+
+- A line connecting two nodes
+
+`Near Miss`
+
+- A loop that almost looked profitable, but not enough to count as one
+
+`Stale`
+
+- An older event that is still shown, but no longer considered fresh
 
 ## Troubleshooting
 
-### "Connection Status" shows Disconnected
+### "Nothing is showing in Live mode"
 
-**Cause**: The Live Dashboard is not connected to Binance's data stream.
+Check these first:
 
-**Solution**:
-1. Check your internet connection
-2. Click **Reconnect** button
-3. Wait 5–10 seconds for reconnection attempt
-4. If still failing, try refreshing the page
+- make sure the app says it is connected
+- wait 10 to 30 seconds
+- make sure `Messages/sec` is not zero
+- turn on `Near Misses`
+- lower `Min Profit`
 
-### No Opportunities Detected in Live Dashboard
+### "The graph is too crowded"
 
-**Cause**: Market is efficient, or your threshold is too high.
+Try:
 
-**Solutions**:
-1. **Lower "Min Profit %"** to 0.01 to catch near-misses
-2. **Toggle "Show Near-Misses"** to ON
-3. **Increase "Notional $"** to look at larger trades
-4. Check if connection is active (green status badge)
+- turning on `Active only` in live mode
+- increasing `Min Frequency` in historical mode
+- zooming in
+- selecting a smaller time range in historical mode
 
-### Historical Dashboard Animation is Slow
+### "Historical mode is not loading"
 
-**Cause**: Too many opportunities to render or interval too granular.
+This usually means a setup issue, not a user mistake in the interface.
 
-**Solutions**:
-1. Switch from **Day** to **Month** interval
-2. Increase **Min Frequency** to filter out noise
-3. Shorten the date range
-4. Reduce playback speed initially, then increase once loaded
+Possible causes:
 
-### Numbers Don't Match (Live vs Historical)
+- backend is not running
+- BigQuery configuration is missing
+- backend credentials are invalid
 
-**Cause**: They measure different things.
+### "I do not understand whether green always means money I could really make"
 
-**Live**: Real-time current market prices
+Not necessarily.
 
-**Historical**: Precomputed data from 2017–2022 using prices at that time
+Green means the app's current calculation logic thinks the loop looks profitable based on the data it has.
+
+Real trading may still fail because of:
+
+- delay
+- fees
+- low liquidity
+- price movement
+
+## Best Practices For New Users
+
+- Start with defaults before changing settings
+- Use `Month` in historical mode first
+- Turn on `Near Misses` if live mode feels empty
+- Use the graphs as learning tools, not trading instructions
+- Click around often; many cards and graph items reveal more detail
+
+## Final Reminder
+
+This app is best used to understand patterns, relationships, and market structure.
+
+You do not need to be an expert to use it. The easiest way to learn is:
+
+1. start with the defaults
+2. watch the graph and cards change
+3. click on things
+4. compare live behavior with historical behavior
