@@ -243,9 +243,3 @@ This applies to:
 - graph timeline
 - triangles
 
-## Known Implementation Notes
-
-- The historical dashboard uses `graph-timeline`, not `graph`, for the main graph
-- The `selectedTriangle` state exists in context but is not currently used by the historical drawer flow
-- The backend exposes more data than the frontend currently renders
-- The UI assumes the historical data range is bounded to `2017-01-01` through `2022-12-31`

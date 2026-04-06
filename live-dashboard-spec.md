@@ -233,10 +233,3 @@ Each group shows:
 
 Rows can be expanded to show grouped child entries.
 
-## Known Implementation Notes
-
-- The current defaults are Binance US endpoints, not global Binance
-- The hard stream cap is `300`, not `200`
-- The stale slider max in the UI is `30`, not `60`
-- The in-memory opportunity cap is `1000`, not `5000`
-- The detection logic is intentionally lightweight and educational, not execution-grade trading logic
